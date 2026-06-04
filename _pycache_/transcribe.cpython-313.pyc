@@ -1,1 +1,629 @@
+ó
+    DÑ ji|  ã                  ó  • S r SSKJr  SSKrSSKrSSKrSSKrSSK r SSKrSSK	J
+r
+  SSK
+Jr  SSK
+JrJrJrJrJrJr  SrSrSrSrS rS rS rS rSrS rS	rSrSr / S
+Qr!\
+ " S
+ S5      5       r"\
+ " S
+ S5      5       r#S4S jr$S4S jr%S5S jr&S6S jr'S7S jr(S8S jr)S9S:S jjr*S9S;S jjr+S<S jr,S=S jr-S=S jr.S=S jr/S>S jr0S?S jr1S@S jr2SAS jr3SBS jr4SCS  jr5SDS! jr6  SE         SFS" jjr7SGS# jr8SHS$ jr9SIS% jr:SJS& jr;SKS' jr<SLS( jr=SMS) jr>SNS* jr?SMS+ jr@  SO         SPS, jjrA                    SQS- jrBSRS. jrCSSS/ jrD                    STS0 jrESUS1 jrFSVS2 jrG\HS3:X  a  \G" 5         gg)Wa„  
+Adaptive Whisper Transcription Pipeline
+======================================
 
+A portable CPU/GPU transcription workflow for audio and video files using
+faster-whisper. It includes automatic hardware selection, audio normalisation,
+VAD presets, anti-repetition safeguards, streaming text output, a visual progress
+bar and optional SRT subtitle generation.
+
+Author: Alberto Reyes Castro
+é    )Ú
+annotationsN)Ú	dataclass)ÚPath)ÚAnyÚDictÚListÚOptionalÚSequenceÚTupleÚautoÚ
+transcribeé   )
+z.mp3z.mp4z.m4az.wavz.movz.mkvz.aacz.flacz.oggz.webmz.wmac                  ó8   • \ rS rSr% SrS\S'   S\S'   S\S '   Srg	)
+Ú
+SegmentRecordéU   z6Lightweight representation of a transcription segment.ÚfloatÚstartÚendÚstrÚtext© N© Ú__name__Ú
+__module__Ú__qualname__Ú__firstlineno__Ú __doc__Ú__annotations__Ú__static_attributes__r   ó    Ú?/mnt/data/adaptive-whisper-transcription-pipeline/transcribe.pyr   r   U   s   ‡ á@à
+ƒLØ	ƒJØ
+
+†Ir    r   c                  ó.   • \ rS rSr% SrS\S'   S\S'   S rg)	Ú
+QualityReporté^   zISimple quality report used to decide whether a fallback preset is needed.ÚboolÚpassedú	List[str]Úissuesr   Nr   r   r    r!   r#   r#   ^   s   ‡ áSàƒLØÖr    r#   c                 ó¸   • [         R                  " 5       n U S-
+  S-
+  U S-
+  S-
+  U S-
+  U S-
+  /nU Vs/ s H  o"R                  5       (       d  M  UPM  
+   sn$ s  snf )zDReturn likely Desktop folders across English/Spanish Windows setups.ÚOneDriveÚ
+EscritorioÚ Desktop)r   ÚhomeÚexists)r-   Ú
+candidatesÚpaths      r!   Úget_desktop_candidatesr1   j   s`   € ä
+9Š9‹;€Dð 	
+ˆzÑ˜LÑ(ØˆzÑ˜IÑ%Øˆ|ÑØˆyÑð	€Jñ (Ó
+9šZT¯;©;¯=D™ZÑ
+9Ð9ùÒ
+9s
+   ²AÁAc                 óT   • / n [        5        H  nU R                  US-
+  5        M  
+   U $ )zÓ
+Return dedicated folders where the script is allowed to auto-detect files.
+
+The script only auto-detects input files inside these folders.
+It does not scan the full Desktop, Spyder folder or current directory.
+Ú
+whisper_input)r1   Úappend)Ú foldersÚ desktops     r!   Úget_default_input_foldersr7   x   s.   € ð €Gä)Ö+ˆ Ø‰w Ñ0Ö1ñ ,ð €Nr    c                 ód   • [        5       n U (       a  U S   S-
+  $ [        R                  " 5       S-
+  $ )z!Return the default output folder.r   Úwhisper_output)r1   r   Úcwd)Údesktop_candidatess    r!   Úget_default_output_rootr<   ‡   s1   € ä/Ó1Ðæ Ø! !Ñ$Ð'7Ñ7Ð7ä
+8Š8‹:Ð(Ñ
+(Ð(r    c                ór   • U R                  5       =(       a!    U R                  R                  5       [        ;   $ )z/Return True if the file extension is supported.)Ú is_fileÚsuffixÚlowerÚSUPPORTED_INPUT_EXTENSIONS)r0   s    r!   Úis_supported_input_filerB   ‘   s&   € à
+<‰<‹>×
+O˜dŸk™k×/Ñ/Ó1Ô5OÑOÐOr    c                ó²   • U R                  5       (       d  / $ [        U R                  5        Vs/ s H  n[         U5      (       d  M  UPM  
+   snS S9$ s  snf )z-List supported audio/video files in a folder.c                ó6   • U R                   R                  5       $ ©N)Únamer@   )Úitems    r!   Ú<lambda>Ú&list_supported_files.<locals>.<lambda>   s   € ˜Ÿ™Ÿ™Ô*r    )Úkey)Úis_dirÚsortedÚ iterdirrB   )Úfolderr0   s     r!   Úlist_supported_filesrO   –   sH   € à
+=‰=?‰?Øˆ	ä
+Ø Ÿ.™.Ô*ÓLÒ*$Ô.EÀd×.KÑ*ÑLÙ*ñð ùÚLs
+   ¯AÁ Ac                óB   • U (       d  gSR                  S U  5       5      $ )z8Format a list of paths for user-friendly console output.ÚNoneÚ
+c              3  ó,   #   • U  H
+  nS U 3v •  M  
+   g7f)z  - Nr   )Ú.0r0   s     r!   Ú	<genexpr>Ú#format_path_list.<locals>.<genexpr>¦   s   é € Ð5ªu tt˜D˜6•]ªuùs   ‚)Újoin)Úpathss    r!   Úformat_path_listrY   ¡   s   € æ
+Øà
+9‰9Ñ5©uÓ5Ó
+5Ð5r    c                ó  • U (       a  [        U 5      R                  5       /O	[        5       n/ nU H  nUR                   [	        U5      5        M  
+   [
+        U5      S:X  a  US   $ [
+        U5      S:”  a  [
+        S[        U5       35      eg)zÑ
+Find exactly one supported file inside a dedicated input folder.
+
+This is the only automatic detection mode. It prevents accidental
+transcription of files from Desktop, Spyder, Downloads or any other folder.
+é   r   zÉMultiple input files were found in the dedicated input folder(s).
+
+To avoid transcribing the wrong file, leave only one supported file there or pass the input explicitly with --input.
+
+Detected files:
+N)r   Ú
+expanduserr7   ÚextendrO   ÚlenÚRuntimeErrorrY   )Ú
+search_folderr5   Ú
+found_filesrN   s       r!   Ú*find_single_file_in_dedicated_input_folderrb   ©   s–   € ö 5BŒtMÓ"×-Ñ-Ó/Ñ0ÔG`ÓGb€Gà €KãˆØ×ÑÔ/°Ó7Ö8ñ ô 
+ˆ;Ó ˜1Ó Ø˜1‰~Ðä 
+ˆ;Ó ˜!Ó Üð
+ ô !1°Ó =Ð>ð 
+@ó
+ð 	
+ð r    c                ó°   • [        U S9nU(       a  [        SU 35        U$ [        5       n[         SSR	                  [
+        5       S[
+        U5       35      e)zý
+Find a default input file safely.
+
+Priority:
+1) Exactly one supported file inside a dedicated 'whisper_input' folder.
+2) Otherwise, stop and ask the user to provide --input.
+
+This function does NOT scan the Desktop, Spyder folder or current directory.
+©r`   u4   âœ… Auto-detected input file from dedicated folder: a–  No input file was provided and no safe default input file was found.
+
+Recommended Spyder workflow:
+1) Create a folder called 'whisper_input' on your Desktop or OneDrive Desktop.
+2) Put exactly ONE supported audio/video file inside it.
+3) Run the script from Spyder.
+
+Alternative workflow:
+Run the script from Anaconda Prompt with:
+python transcribe.py --input "C:\path\to\audio.m4a"
+
+Supported extensions:
+z, z#
+
+Dedicated input folders checked:
+) rb   Úprintr7   ÚFileNotFoundErrorrW   rA   rY   )r`   Údedicated_fileÚdefault_input_folderss      r!   Úfind_default_input_fileri   Å   sl   € ô @ÈmÑ\€Næ Ü
+ÐDÀ^ÐDTÐUÔVØÐä5Ó7Ðä
+ð	"ð 9‰9Ô/Ó
+0Ð
+1ð 2-ä
+Ð1Ó
+2Ð
+3ð
+	5ó
+
+ð 
+r    c                óæ   • U R                  5       nU R                  5        SUR                   SUR                   3R	                  S5      n[
+        R                  " U5      R                  5       SS $ )zª
+Create a short fingerprint from file path, size and modification time.
+
+This prevents accidentally reusing an old WAV cache when the input extension
+or content changes.
+Ú|úutf-8Né
+   )ÚstatÚ resolveÚ st_sizeÚ
+st_mtime_nsÚencodeÚ hashlibÚmd5Ú	hexdigest)Ú
+input_pathrn   Úraws      r!   Úinput_fingerprintrx   ç   se   € ð ?‰?Ó
+€DØ
+×
+Ñ
+Ó
+!Ð" ! D§L¡L >°°4×3CÑ3CÐ2DÐ
+E×
+LÑ
+LÈWÓ
+U€Cä
+;Š;sÓ
+×
+%Ñ
+%Ó
+'¨¨Ð
+,Ð,r    c                ó8   • [        5       nXR                   S3-
+  $ )z>Create a default TXT output path based on the input file name.z_transcription.txt©r<   Ústem©rv   Ú
+output_roots     r!   Údefault_txt_output_pathr~   ô   s    € ä)Ó+€KØ
+ŸO™OÐ,Ð,>Ð?Ñ
+?Ð?r    c                ó8   • [        5       nXR                   S3-
+  $ )z>Create a default SRT output path based on the input file name.z_subtitles.srtrz   r|   s     r!   Údefault_srt_output_pathr€   ú   s   € ä)Ó+€KØ
+ŸO™OÐ,¨NÐ;Ñ
+;Ð;r    c                ó\   • [        5       n[        U 5      nUS-
+  U R                   SU S3-
+  $ )zJCreate a unique intermediate WAV path based on the input file fingerprint.ÚcacheÚ_z
+_prepared.wav)r<   rx   r{   )rv   r}   Ú
+fingerprints      r!   Údefault_wav_output_pathr…      s6   € ä)Ó+€KÜ# JÓ/€Kà
+˜Ñ
+  j§o¡oÐ%6°a¸
+°}ÀMÐ#RÑ
+RÐRr    c                óÂ   • U S::  a  g[         R                  R                  SS5        [         U 5      [         R                  S'   [         U 5      [         R                  S'   g) z6Limit CPU thread usage for OpenMP/MKL-based libraries.r   NÚKMP_DUPLICATE_LIB_OKÚTRUEÚOMP_NUM_THREADSÚMKL_NUM_THREADS)ÚosÚ environÚ
+setdefaultr   )Ú threadss    r!   Úconfigure_threadsr     sG   € à !ƒ|Øä‡JJ×ÑÐ0°&Ô9Ü$'¨ £L„B‡JJÐ Ñ!Ü$'¨ £L„B‡JJÐ Ò!r    c                 ó¾   •  SSK n U R                  R                  5       (       a  g  SSKnUR
+                  5       S:„  $ ! [          a     N$f = f! [          a     gf = f)z=Return True if a CUDA-capable device appears to be available.r   NTF)ÚtorchÚcudaÚis_availableÚ	ExceptionÚ
+ctranslate2Úget_cuda_device_count)r‘   r•   s     r!   Úcuda_is_availabler—     sh   € ð
+Ûà
+:‰:×
+"Ñ
+"×
+$Ñ
+$Øð %ð
+Ûà×0Ñ0Ó2°QÑ6Ð6øô
+ ó 
+Ùð
+ûô ó Ùðús    ‚#? ¨A ¿
+AÁ
+AÁ
+AÁAc                ó”   • U S:X  a  [        5       (       a  S$ S$ U S:X  a(  [        5       (       d  [        S[        R                  S9  gU $ )z+Resolve 'auto' into either 'cuda' or 'cpu'.r   r’   Úcpuu[   âš ï¸  CUDA was requested but no compatible CUDA device was detected. Falling back to CPU.©Úfile)r—   re   ÚsysÚstderr)Úrequested_devices    r!   Úresolve_devicerŸ   (  sM   € à ˜6Ó !Ü*×,Ñ,ˆvÐ7°%Ð7à ˜6Ó !Ô*;×*=Ñ*=Ü
+ð
+#ä—‘ò 	
+ð
+ à
+Ðr    c                ó&   • US:w  a  U$ U S:X  a  S$ S$ )z9Choose a sensible compute type for the selected hardware.r   r’   Ú float16Úint8r   )ÚdeviceÚrequested_compute_types     r!   Úresolve_compute_typer¥   8  s"   € à  Ó 'Ø%Ð%à &Ó(ˆ9Ð4¨fÐ4r    c                ó&   • US:w  a  U$ U S:X  a  S$ S$ )z9Choose a sensible default model for CPU or GPU execution.r   r’   zlarge-v3Úmediumr   )r£   Úrequested_models     r!   Ú
+resolve_modelr©   @  s"   € à ˜&Ó  ØÐà 6Ó)ˆ:Ð7¨xÐ7r    c                ó^  • SSK Jn  U (       aL  [        U 5      R                   5       nUR	                  5       (       d  [
+        SU 35      e[
+        U5      Ul         U(       aM  [        U5      R                   5       nUR	                  5       (       d  [
+        SU 35      e[
+        U5      Ul        gg)zFConfigure pydub to use explicit FFmpeg/FFprobe binaries when provided.r   )ÚAudioSegmentzFFmpeg executable not found: zFFprobe executable not found: N)	Úpydubr«   r   r\   r>   rf   r   Ú	converterÚ ffprobe)Ú
+ffmpeg_pathÚffprobe_pathr«   r0   s       r!   Úconfigure_ffmpegr±   L  sŠ   € å"æ ÜKÓ ×+Ñ+Ó-ˆà|‰|~‰~Ü#Ð&CÀDÀ6Ð$JÓKÐKä!$ T£ˆÔæ ÜLÓ!×,Ñ,Ó.ˆà|‰|~‰~Ü#Ð&DÀTÀFÐ$KÓLÐLä" 4›yˆÕð
+ r    c                ót   • U (       a  g[         R                  " S5      c  [        S[        R                  S9  gg)zMWarn the user if FFmpeg is not visible from PATH and no explicit path is set.NÚffmpeguy   âš ï¸  FFmpeg was not found in PATH. If audio extraction fails, install FFmpeg or pass --ffmpeg-path and --ffprobe-path.rš   )ÚshutilÚwhichre   rœ   r   )r¯   s    r!   Úensure_ffmpeg_availabler¶   a  s0   € æ Øä 
+‡|‚|HÓ Ñ %Ü
+ð
+8ä—‘ó 	
+ð &r    c                ó˜  • SSK JnJn  U R                   5       (       d  [	        SU  35      eU(       ai  UR                   5       (       aT  UR
+                  5       R                  S:”  a6  [        SU 35        UR                  [        U5      5      n[        U5      S-
+  $ [        S5        UR                  R                  S S S9  UR                  [        U 5      5      nUR                  S	5      R                  S
+5      R                  S
+5      nU(       a  UR!                  U5      nUR#                  [        U5      SS
+S/S9  [        U5      S-
+  $ )zq
+Convert any audio/video input into WAV 16 kHz mono PCM16.
+
+Returns
+-------
+float
+    Audio duration in seconds.
+r   )r«   Ú effectszInput file not found: u   âœ… Reusing existing WAV: g     @@u0   ðŸ”„ Preparing audio as WAV 16 kHz mono PCM16...T©Ú parentsÚexist_okr[   i€>  é   Úwavz -acodecÚ	pcm_s16le)ÚformatÚ
+parameters)r¬   r«   r¸   r>   rf   rn   rp   re   Ú	from_filer   r^   ÚparentÚmkdirÚset_channelsÚset_frame_rateÚset_sample_widthÚ	normalizeÚexport) rv   Úwav_pathÚnormalize_audioÚreuse_existing_wavr«   r¸   Úaudios           r!   Ú
+prepare_wavrÍ   n  s!  € ÷ ,à
+×
+Ñ
+×
+Ñ
+ÜÐ"8¸¸Ð EÓFÐFæ ˜h×.Ñ.×0Ñ0°X·]±]³_×5LÑ5LÈqÓ5PÜ
+Ð*¨8¨*Ð5Ô6Ø×&Ñ&¤s¨8£}Ó5ˆÜ5‹z˜FÑ"Ð"ä	Ð
+<Ô=Ø‡OO×Ñ $°ÐÑ6à×"Ñ"¤3 z£?Ó3€EØ×Ñ˜qÓ!×0Ñ0°Ó7×HÑHÈÓK€Eæ Ø×!Ñ! %Ó(ˆà	‡LLÜ
+ˆH‹
+ØØ˜{Ð+ð  ñ ô ˆu‹:˜Ñ
+Ðr    c           
+     ó¸   • SSSSSSS S. n0 UES	S
+S
+SS
+.S.E0 UES
+SSS
+.S.E0 UES
+SS
+S
+.SSS.E0 UESS0E0 UESS
+SSS
+.S.ES.nX;  a  [        SU  35      eX    $ )z?Return faster-whisper transcription options for a given preset.r
+   é   ç        Fç333333@ç      ð¿g333333ã?) ÚtaskÚ	beam_sizeÚ
+temperatureÚcondition_on_previous_textÚcompression_ratio_thresholdÚlog_prob_thresholdÚno_speech_thresholdr[   Ti,  é–   )Úmin_silence_duration_msÚ
+speech_pad_ms)rÔ   Ú
+vad_filterÚvad_parametersiô  éÈ   )rÝ   rÞ   i¼  é   gš™™™™™ñ?)rÝ   rÞ   Úno_repeat_ngram_sizeÚrepetition_penaltyrÝ   )ÚfastÚbalancedÚrobustúno-vadúgpu-high-accuracyzUnknown preset: )Ú
+ValueError)ÚpresetÚbaseÚ presetss      r!   Úget_preset_optionsrì   œ  sñ   € ð ØØØ&+Ø'*Ø"Ø"ñ€Dð
+Øð
+àØà+.Ø!$ñò	
+ð 
+Øð 
+àà+.Ø!$ñò  
+ð	
+Øð	
+àà+.Ø!$ñð %&Ø"&ò	
+ð
+Øð
+à˜%ñ
+ð
+Øð
+àØà+.Ø!$ñò	
+ñA)*€GðV Ó ÜÐ+¨F¨8Ð4Ó5Ð5à
+‰?Ðr    c                ó   • U S:X  a  / SQ$ U /$ )z;Return the preset order used by normal and automatic modes.r   )rä   rå   ræ   r   )ré   s    r!   Úpreset_sequencerî   Ù  s   € à 
+Ó Ú/Ð/àˆ8€Or    c                ó  •  [         R                  " U 5      nUR                  n[	        S UR
+                  5        5       5      (       a  U$ UR
+                  5        VVs0 s H  u  pEXC;   d  M  XE_M  
+   snn$ ! [          a    Us $ f = fs  snnf )z=Remove keyword arguments unsupported by a callable signature.c              3  ón   #   • U  H+  oR                   [        R                  R                  :H  v •  M-  
+   g 7frE   )ÚkindÚ inspectÚ	ParameterÚ
+VAR_KEYWORD)rT   Úparams     r!   rU   Ú*filter_supported_kwargs.<locals>.<genexpr>î  s%   é € Ð
+XÒDW¸5:‰:œ×*Ñ*×6Ñ6Ö
+6ÒDWùs   ‚35) rò   Ú	signaturer”   rÀ   ÚanyÚvaluesÚitems)Úcallable_objÚkwargsr÷   rÀ   rJ   Úvalues         r!   Úfilter_supported_kwargsrþ   å  s„   € ðÜ×%Ò% lÓ3ˆ	ð ×%Ñ%€Jä 
+Ñ
+XÀJ×DUÑDUÔDWÓ
+X× XÑ XØˆ
+à)/¯©¬Ô
+Mª™:˜3¸3Ñ;L‹JˆCŠJ©Ò
+MÐMøô ó ØŠ
+ðüó Ns   ‚A7 Á
+B	Á-B	Á7BÂBc                ó*  • SSK Jn  [        U 5      R                   5       nUR	                  5       (       a
+  [
+        U5      OU nUUS.n US:X  a
+  US:”  a  X7S'   [
+        UR                  U 5      n [        SU 35        [        S U SU 35        U" U40 U D6$ )	zALoad a faster-whisper model from a model name or local directory.r   )ÚWhisperModel)r£   Úcompute_typer™   Ú
+cpu_threadsu   â³ Loading model: u   ðŸ–¥ï¸  Device: z | compute_type: )	Úfaster_whisperr   r   r\   rK   r   rþ   Ú__init__re   )Úmodel_sourcer£   r  rŽ   r   Ú
+model_pathÚsourceÚ
+init_kwargss           r!   Ú
+load_modelr	  ô  s    € å+älÓ#×.Ñ.Ó0€JØ *× 1Ñ 1× 3Ñ 3ŒSŒ_¸€Fð Ø$ñ#€Kð
+ ƒ˜7 Q›;Ø%,MÑ"ä)¨,×*?Ñ*?ÀÓM€Kä	Ð ˜xÐ
+(Ô)Ü	Ð˜f˜XÐ%6°|°nÐ
+EÔFá
+˜Ñ
+. +Ñ
+.Ð.r    c                ól   • U (       d  gSR                  U R                  5       R                  5       5      $ )z0Normalise whitespace in a transcription segment.Ú Ú )rW   ÚstripÚsplit)r   s    r!   Úclean_segment_textr  
+  s&   € æ
+Øà
+8‰8D—J‘J“L×&Ñ&Ó(Ó
+)Ð)r    c                ó¬   • U(       d  gU(       d  g[        U SS5      n[        U SS5      n[        U SS5      nUb  Ub
+  US :”  a   US:  a  gUb   US	:”  a  gg)
+zJApply optional filters for likely hallucinated or low-confidence segments.TFÚno_speech_probNÚ
+avg_logprobÚcompression_ratiogš™™™™™é?rÒ   rÑ   )Ú getattr)Ú segmentr   Ústrict_filteringr  r  r  s         r!   Úshould_skip_segmentr    sl   € æ
+Øæ
+Øä˜WÐ&6¸Ó=€NÜ˜' =°$Ó7€KÜ  Ð)<¸dÓCÐà Ñ ! kÑ&=Ø
+˜DÓ
+  [°4Ó%7Øà Ñ $Ð):¸SÓ)@Øà
+r    c                ó¦   • [        [        U S-  5      5      n[        US5      u  p#[        US5      u  pC[        US5      u  pVUS SUS SUS SUS  3 $ )z#Format seconds as an SRT timestamp.iè  i€î6 i`ê  Ú02dÚ:Ú,Ú03d)ÚintÚroundÚdivmod) Ú secondsÚmillisecondsÚhoursÚ	remainderÚ minutesÚsecsÚmilliss           r!   Ú
+srt_timestampr'  )  sf   € ä”u˜W t™^Ó,Ó-€LÜ˜l¨IÓ6Ñ€EÜ 	¨6Ó2Ñ€GÜ˜) TÓ*L€DàCˆ[˜˜' #˜ a¨¨S z°°6¸#°,Ð
+?Ð?r    c                 ó¦   • U R                  U S35        U R                  [        U5       S[        U5       S35        U R                  U S35        g)zWrite one SRT subtitle block.rR   ú --> z
+
+N)Úwriter'  )ÚhandleÚindexr   r   r   s        r!   Úwrite_srt_blockr-  3  sK   € à
+‡LLE7˜"ÔØ
+‡LL”M %Ó(Ð)¨¬}¸SÓ/AÐ.BÀ"ÐEÔFØ
+‡LLD6˜Õr    c                óœ   • [        [        SU 5      5      n [        U S5      u  p[        US5      u  p4US:”  a
+  US SUS SUS 3$ US SUS 3$ )z$Format seconds as MM:SS or HH:MM:SS.r   i  é<   r  r  )r  Úmaxr  )r   r"  r#  r$  r%  s        r!   Úformat_durationr1  :  sh   € ä”#a˜“/Ó"€GÜ˜g tÓ,Ñ€EÜ˜9 bÓ)M€Gà ˆqƒyØ˜˜A˜g c˜]¨!¨D°¨:Ð6Ð6àcˆ]˜!˜D ˜:Ð
+&Ð&r    c                óæ   • US::  a  g[        [        X-
+  S5      S5      n[        X4-  5      nX5-
+  nSU-  SU-  -   n US -  n[         U 5      n	[         U5      n
+[	        SU S	U  S
+US
+ SU	 S
+U
+ 3
+SSS9  g)zÄ
+Print a terminal progress bar based on the current audio timestamp.
+
+This is not a low-level model progress indicator. It estimates progress
+using the end time of the latest transcribed segment.
+r   NrÐ   g      ð?u   â–ˆu   â–‘éd   Ú
+z: |z| z5.1fz%  z / r
+  T)r   Úflush)Úminr0  r  r1  re   )
+Úcurrent_timeÚ
+total_timeÚprefixÚwidthÚratioÚfilledÚemptyÚbarÚ percentÚ
+current_labelÚ
+total_labels
+              r!   Úprint_progress_barrB  F  s˜   € ð QƒØä”LÑ-¨sÓ3°SÓ9€EÜ
+‘Ó
+€FØ‰N€Eà
+&‰.˜5 5™=Ñ
+(€CØc‰k€Gä# LÓ1€MÜ! *Ó-€Kä	Ø
+ˆVˆHC˜u˜B˜w t˜n¨C°
+¨¸cÀ+ÀÐOØØó r    c	           
+     óð  • [        U5      n	XiS'   Ub  XYS'   [        U R                  U	5      n	[         SU 35        U R                  " [	        U5      40 U	D6u  p«[
+        U
+S5      (       aF  [
+        U
+SS5      nUb  [         SU
+R                   S US S	35        O[         SU
+R                   35        UR                  R                  S
+S
+S
+9  U(       a  UR                  R                  S
+S
+S
+9  US:H  n
+/ nS
+nSnSnU(       a
+  [        USSS9OSn [        USSS9 nU
+ GHB  n[        [
+        USS
+5      5      n[        UUU
+5      (       a  M.  UU:X  a  US-
+  nUS:¼  a  MA  OSnUn[        [
+        USS5      5      n[        [
+        USU5      5      n[        UUUS9nUR                  U5        U (       a.  UR!                  S[#        U5       S[#        U5       SU S3 5        OUR!                  US-   5        UR%                  5         U(       a(  ['        U[)        U5      UUU5        UR%                  5         UU-
+  S:¼  d  [)        U5      S:X  d  GM1  [+        UUSU S	3S9  UnGME  
+   SSS5        U(       a  UR-                  5         U(       a  [+        [/        S  U 5       5      USU S	3S9  [         5         [         S![)        U5       35        U$ ! , (       d  f       Nn= f! U(       a  UR-                  5         f f = f)"zDRun one transcription attempt and stream the result to output files.rÓ   NÚlanguageu#   ðŸŽ™ï¸  Transcribing with preset: Úlanguage_probabilityu   ðŸŒ Detected language: z (z.2fÚ)Tr¹   rå   r
+  r   rÐ   Úwrl   )Úencodingr   r[   r¼   r   r   )r   r   r   Ú[r)  z] rR   g       @zTranscribing ()r7  r8  r9  c              3  ó8   #   • U  H  oR                   v •  M  
+   g 7frE   ©r   ©rT   Úrecords     r!   rU   Ú"transcribe_once.<locals>.<genexpr>Ä  s   é € Ð>²g¨FŸZžZ²gùó   ‚u   âœ… Segments written: )rì   rþ   r
+   re   r   Ú hasattrr  rD  rÂ   rÃ   Úopenr  r  r   r   r4   r*  r'  r5  r-  r^   rB  Úcloser0  )ÚmodelrÉ   Ú
+output_txtÚ
+output_srtré   rD  rÓ   Úinclude_timestamps_in_txtÚaudio_durationÚ optionsÚsegments_iteratorÚinfoÚ
+probabilityr  Ú recordsÚ	last_textÚ
+repeat_streakÚlast_progress_timeÚ
+srt_handleÚ
+txt_handleÚ
+raw_segmentr   r   r   rM  s                            r!   Útranscribe_oncerc  f  s  € ô ! Ó(€GØˆFOà Ñ Ø&
+Ñä% e×&6Ñ&6¸ Ó@€Gä	Ð/°¨xÐ
+8Ô9Ø#×.Ò.¬s°8«}ÑHÀ ÑHÑÐä ˆtZ×  Ñ  Ü˜dÐ$:¸DÓAˆ
+à
+Ñ
+"ÜÐ,¨T¯]©]¨O¸2¸kÈ#Ð=NÈaÐPÕQäÐ,¨T¯]©]¨OÐ<Ô=à×Ñ×Ñ D°4ÐÑ8æ Ø×Ñ×Ñ¨°tÐÑ<à Ñ)ÐØ#%€GØ€IØ€MØÐæ<F”j #° Ò8ÈD€Jð.Ü
+*˜c¨GÒ
+4¸
+Ü0
+Ü)¬'°+¸vÀrÓ*JÓKä& {°DÐ:J×KÑKÙà˜9Ó$Ø! QÑ&Mà$¨Ó)Ù ð *ð %&MØ $Iäœg k°7¸CÓ@ÓAÜœG K°¸Ó>Ó?ä&¨U¸À$ÑGØ—‘˜vÔ&æ,Ø×$Ñ$ q¬°uÓ)=Ð(>¸eÄMÐRUÓDVÐCWÐWYÐZ^ÐY_Ð_aÐ%bÕcà×$Ñ$ T¨D¡[Ô1à× Ñ Ô"æÜ# J´°G³¸eÀSÈ$ÔOØ×$Ñ$Ô&ð Ð+Ñ+¨sÓ2´c¸'³lÀaÖ6GÜ&Ø%(Ø#1Ø!/°¨x°qÐ9ò ð
+ *-Ó&ñQ  1÷ 5öX Ø×ÑÔæ ÜÜÑ>±gÓ>Ó>Ø%Ø# F 8¨1Ð-ò 	
+ô 
+„GÜ	Ð"¤3 w£< .Ð
+1Ô2à
+€N÷s 5Õ
+4ûöX Ø×ÑÕð ús+   Ä
+
+K ÄD/K
+ÉK
+É"K Ë
+
+K Ë K ËK5c                ó´   • / nU  H)  nUR                  S UR                  5        5       5        M+  
+   U(       d  g[        [         U5      5      [        U5      -
+  $ )z8Return a simple unique-word ratio for the transcription.c              3  ón   #   • U  H+  oR                  5       (       d  M  UR                  5       v •  M-  
+   g 7frE   )r
+  r@   )rT   Úwords     r!   rU   Ú$lexical_diversity.<locals>.<genexpr>Ø  s    é € ÐKªl d¿j¹j¿l“\T—Z‘Z—\\ªlùs   ‚5ž5rÐ   )r]   r  r^   Úset)ÚtextsÚwordsr   s      r!   Úlexical_diversityrk  Ó  sH   € à€EãˆØ
+‰ÑK¨d¯j©j¬lÓKÖKñ ö Øä
+Œs5‹z‹?œS ›ZÑ
+'Ð'r    c           	     óˆ  • / nU (       d
+  [        SS/5      $ U  Vs/ s H  o3R                  PM  
+   nn[        S U 5       5      n[         S U  5       5      nUS:”  a  US:  a  UR	                  S 5        US:”  a  XaS	-  :  a  UR	                  S
+5        [        S
+ [
+        XDSS
+ 5       5       5      n [
+        U5      S:¼  a0  U [         S[
+        U5      S-
+  5      -
+  S:”  a  UR	                  S5        [        U5      n[        S U 5       5      n	U	S:”  a  US:  a  UR	                  S5        [        [
+        U5      S:H  US9$ s  snf )zKDetect common failure modes: empty output, early stop and repetition loops.Fz'no transcription segments were producedc              3  ó8   #   • U  H  n[        U5      v •  M  
+   g 7frE   )r^   ©rT   r   s     r!   rU   Ú'assess_transcription.<locals>.<genexpr>è  s   é € Ð2ªE D”c˜$—iiªEùrO  c              3  ó8   #   • U  H  oR                   v •  M  
+   g 7frE   rK  rL  s     r!   rU   ro  é  s   é € Ð4ªG &—:–:ªGùrO  é   éP   z#transcription is unexpectedly shortr/  gÍÌÌÌÌÌÜ?z'transcription appears to stop too earlyc              3  ó8   #   • U  H  u  pX:X  d  M  S v •  M  
+   g7f)r[   Nr   )rT   ÚpreviousÚ currents      r!   rU   ro  ñ  s"   é € ð Ú#8ÑˆhØ
+Ñ
+÷ 	
+‰Ò#8ùs   ‚
+‘	r[   Nrm   gš™™™™™É?z+many consecutive repeated segments detectedc              3  óT   #   • U  H  n[        UR                  5       5      v •  M   
+   g 7frE   )r^   r  rn  s     r!   rU   ro  ú  s   é € Ð9²5¨4”S˜Ÿ™›×&Ð&²5ùs   ‚&(g
+×£p=
+Ç?z4very low lexical diversity; possible repetition loopr   )r&   r(   )r#   r   Úsumr0  r4   Úzipr^   rk  )
+r\  rW  r(   rM  ri  Ú
+total_charsÚlast_endÚrepeated_linesÚ	diversityÚ
+word_counts
+             r!   Úassess_transcriptionr~  à  s4  € à€Fæ
+Ü˜UÐ%NÐ$OÓPÐPá'.Ó/¢w˜V[Œ[¡w€EÐ/ÜÑ2©EÓ2Ó2€KÜÑ4©GÓ4Ó4€Hà ˜Ó ˜{¨RÓ/Ø
+‰
+Ð;Ô<à ˜Ó ˜x¸4Ñ*?Ó?Ø
+‰
+Ð?Ô@äñ Ü#& u°A°B¨iÔ#8óó €Nô
+ 
+ˆ5ƒzRÓ ˜N¬S°´C¸³JÀ±NÓ-CÑCÀdÓJØ
+‰
+ÐCÔDä! %Ó(€IÜÑ9±5Ó9Ó9€Jà Bƒ˜9 tÓ+Ø
+‰
+ÐLÔMä
+¤ F£
+¨qÑ 0¸Ñ
+@Ð@ùò1 
+0s   ›D?c	           
+     ó^  • [        U5      n	[        SS/5      n
+U	S   n
+[        U	SS9 H€  u  pÍUS:”  a  [         SU
+ 35        [	        U UUUU
+UUU US 9	n[
+        Xè5      nU
+n
+Un
+UR                  (       d  US:w  a    Xº4$ [         S	5        UR                   H  n[         S
+U 35        M  
+   M‚  
+   Xº4$ )
+zBRun the requested preset and retry with safer presets when needed.Fz
+not attemptedéÿÿÿÿr[   )r   u%   
+ðŸ” Retrying with fallback preset: )	rS  rÉ   rT  rU  ré   rD  rÓ   rV  rW  r   u)   âš ï¸  Possible quality issues detected:z   - )rî   r#   Ú	enumeratere   rc  r~  r&   r(   )rS  rÉ   rT  rU  Úrequested_presetrD  rÓ   rV  rW  ÚattemptsÚ
+last_reportÚfinal_presetÚ
+attempt_indexré   r\  ÚreportÚissues                    r!   Útranscribe_with_fallbacksr‰    sÝ   € ô Ð/Ó0€HÜ ¨Ð'8Ó9€KØ˜B‘<€Lä!*¨8¸1Ô!=Ñˆ
+Ø
+˜1Ó
+ÜÐ:¸6¸(ÐCÔDä!ØØØ!Ø!ØØØØ&?Ø)ñ
+
+ˆ ô & gÓ>ˆØˆØˆ
+à
+==Ð,°Ó6Øð Ð
+$Ð$ô
+ 	Ð9Ô:à—]”]ˆEÜE˜%˜/Ö"ó #ñ3 ">ð8 Ð
+$Ð$r    c                 óÊ  • [         R                  " S[         R                  S9n U R                   SSS[        SS 9  U R                   SS	[
+        S
+S
+9  U R                   S[        S
+S
+9  U R                   S[        SS
+9  U R                   SS SS
+9  U R                   S/ SQ[        SS9  U R                   S[        SS
+9  U R                   S[        SS
+9  U R                   S[        SS
+9  U R                   SSS/[        SS9  U R                   S / S!Q[        S"S9  U R                   S#[        S$S
+9  U R                   S%[        S&S
+9  U R                   S'[         ["        S(S)9  U R                   S*S+S,S-9  U R                   S.S+S/S-9  U R                   S0S+S1S-9  U R%                  5       u  pU(       a  ['        S2U5        UR(                  (       d#  [+        UR,                  S39n[/        U5      Ul        U$ )4NzEAdaptive CPU/GPU Whisper transcription pipeline using faster-whisper.)Ú
+descriptionÚformatter_classz-iz --inputFz^Input audio/video file. If omitted, the script checks only the dedicated whisper_input folder.)ÚrequiredÚ defaultÚhelpz-oz--outputz>Output TXT file. If omitted, a default output path is created.)rŽ  r  z--srt-outputz"Optional SRT subtitle output path.z--wav-outputzKOptional intermediate WAV path. If omitted, a unique cache path is created.z--input-folderz=Optional dedicated folder used for safe input auto-detection.z--device)r   r™   r’   zExecution device.)Ú choicesrŽ  r  z--compute-typezSCTranslate2 compute type, for example auto, int8, float16, float32 or int8_float16.z --modelzIModel name or local model directory. Use auto for CPU/GPU-aware defaults.z
+--languagezALanguage code such as en or es. Use auto for automatic detection.z--taskr
+   Ú	translatezFUse transcribe to keep the original language, or translate to English.z--preset)r   rã   rä   rå   ræ   rç   zXTranscription behaviour preset. Auto tries balanced, then robust, then no-vad if needed.z
+--ffmpeg-pathz%Optional explicit path to ffmpeg.exe.z--ffprobe-pathz&Optional explicit path to ffprobe.exe.z	--threadszMCPU threads for CPU inference and OpenMP/MKL limits. Use 0 to leave defaults.)ÚtyperŽ  r  z--no-normalizeÚ
+store_truez8Disable audio volume normalisation before transcription.)Úactionr  z--no-reuse-wavz*Always recreate the intermediate WAV file.z--timestampsz%Include timestamps in the TXT output.u4   âš ï¸  Ignoring unknown arguments added by the IDE:rd   )ÚargparseÚArgumentParserÚArgumentDefaultsHelpFormatterÚadd_argumentÚ
+DEFAULT_INPUTÚDEFAULT_OUTPUTÚDEFAULT_SRT_OUTPUTÚDEFAULT_WAV_OUTPUTÚDEFAULT_DEVICEÚDEFAULT_COMPUTE_TYPEÚ
+DEFAULT_MODELÚDEFAULT_LANGUAGEÚDEFAULT_TASKÚDEFAULT_PRESETÚDEFAULT_FFMPEG_PATHÚDEFAULT_FFPROBE_PATHr  ÚDEFAULT_THREADSÚparse_known_argsre   Úinputri   Úinput_folderr   )ÚparserÚargsÚunknown_argsÚdetected_inputs       r!   Ú
+parse_argsr­  5  s  € Ü
+×
+$Ò
+$Ø[Ü ×>Ñ>ñ€Fð
+ 
+×ÑØØØÜØ
+mð
+ ñ ð 
+×ÑØØÜØ
+Mð	 ñ ð 
+×ÑØÜ"Ø
+1ð  ñ ð 
+×ÑØÜ"Ø
+Zð  ñ ð 
+×ÑØØØ
+Lð  ñ ð 
+×ÑØÚ'ÜØ
+ ð	 ñ ð 
+×ÑØÜ$Ø
+bð  ñ ð 
+×ÑØÜØ
+Xð  ñ ð 
+×ÑØÜ Ø
+Pð  ñ ð 
+×ÑØØ˜{Ð+ÜØ
+Uð	 ñ ð 
+×ÑØÚUÜØ
+gð	 ñ ð 
+×ÑØÜ#Ø
+4ð  ñ ð 
+×ÑØÜ$Ø
+5ð  ñ ð 
+×ÑØÜ
+ÜØ
+\ð	 ñ ð 
+×ÑØØØ
+Gð  ñ ð 
+×ÑØØØ
+9ð  ñ ð 
+×ÑØØØ
+4ð  ñ ð  ×0Ñ0Ó2Ñ€Dæ Ü
+ÐDÀlÔSà
+::Ü0¸t×?PÑ?PÑQˆÜ˜Ó(ˆŒ
+à
+€Kr    c                 ó,   • [        5       n [        U R                  5        [         U R                  U R
+                  5        [
+        U R                  5        [        U R                  5      R                  5       R                  5       nU R                  (       a1  [        U R                  5      R                  5       R                  5       O[        U5      R                  5       nU R                  (       a1  [        U R                  5      R                  5       R                  5       OS nU R                  (       a1  [        U R                  5      R                  5       R                  5       O[        U5      R                  5       n[!        U R"                  5      n[%        XPR&                  5      n[)        XPR*                  5      n U R,                  R/                  5       S:X  a  S O
+U R,                  n[1        S5        [1        SU 35        [1        SU 35        [1        SU 35        U(       a  [1        SU 35        [1        S U 35        [1        SU 35        [1        S	U  35        [1        S
+U R2                   35        [1        S
+U R,                   35        [5        UUU R6                  (       + U R8                  (       + S9n	[1        S
+U	S S35        [;        U UUU R                  S9n
+[=        U
+UUUU R2                  UU R>                  U R@                  U	S9	u  p¼[1        S5        [1        SU
+ 35        [1        SU 35        U(       a  [1        SU 35        URB                  (       a  [1        S5        g [1        S5        URD                   H  n
+[1        SU
+ 35        M  
+   g )Nr   z0
+=== Adaptive Whisper Transcription Pipeline ===zInput:        zOutput TXT:   zWAV file:     zOutput SRT:   zDevice:       zCompute type: zModel:        zPreset:       zLanguage:     )rv   rÉ   rÊ   rË   u   â±ï¸  Audio duration: z.1fÚs)r  r£   r  rŽ   )	rS  rÉ   rT  rU  r‚  rD  rÓ   rV  rW  z
+=== Completed ===zFinal preset: zTXT saved to: zSRT saved to: zQuality check: passedz!Quality check: review recommendedz- )#r­  r   rŽ   r±   r¯   r°   r¶   r   r§  r\   ro   Úoutputr~   Ú
+srt_outputÚ
+wav_outputr…   rŸ   r£   r¥   r  r©   rS  rD  r@   re   ré   rÍ   Úno_normalizeÚno_reuse_wavr	  r‰  rÓ   Ú
+timestampsr&   r(   )rª  rv   rT  rU  rÉ   r£   r  r  rD  rW  rS  r…  r‡  rˆ  s                 r!   Úmainr¶  µ  sï  € Ü
+‹<€Däd—l‘lÔ#ÜT×%Ñ% t×'8Ñ'8Ô9Ü˜D×,Ñ,Ô-äd—j‘jÓ!×,Ñ,Ó.×6Ñ6Ó8€Jð ;;ô 	
+ˆT[‰[Ó×$Ñ$Ó&×.Ñ.Ô0ä
+$ ZÓ
+0×
+8Ñ
+8Ó
+:ð  ð ??ô 	
+ˆT_‰_Ó×(Ñ(Ó*×2Ñ2Ô4à
+ð  ð ??ô 	
+ˆT_‰_Ó×(Ñ(Ó*×2Ñ2Ô4ä
+$ ZÓ
+0×
+8Ñ
+8Ó
+:ð  
+ô ˜DŸK™KÓ
+(€FÜ'¨×0AÑ0AÓB€LÜ  ¯©Ó4€LØ—}‘}×*Ñ*Ó,°Ó6‰t¸D¿M¹M€Hä	Ð
+=Ô>Ü	ˆN˜:˜,Ð
+'Ô(Ü	ˆN˜:˜,Ð
+'Ô(Ü	ˆN˜8˜*Ð
+%Ô&æ Ü
+˜z˜lÐ+Ô,ä	ˆN˜6˜(Ð
+#Ô$Ü	ˆN˜<˜.Ð
+)Ô*Ü	ˆN˜<˜.Ð
+)Ô*Ü	ˆN˜4Ÿ;™;˜-Ð
+(Ô)Ü	ˆN˜4Ÿ=™=˜/Ð
+*Ô+ä ØØØ ×-Ñ-Ô-Ø#×0Ñ0Ô0ñ	€Nô 
+Ð$ ^°CÐ$8¸Ð
+:Ô;äØ!ØØ!Ø—‘ñ	
+€Eô 5ØØØØØŸ™ØØ
+Y‰YØ"&§/¡/Ø%ñ
+Ñ€Lô 
+Ð
+Ô Ü	ˆN˜<˜.Ð
+)Ô*Ü	ˆN˜:˜,Ð
+'Ô(æ Ü
+˜z˜lÐ+Ô,à 
+‡}‡}Ü
+Ð%Õ&ä
+Ð1Ô2à—]”]ˆEÜBug,Öò #r    Ú__main__)Úreturnú
+List[Path])r¸  r   )r0   r   r¸  r%   )rN   r   r¸  r¹  )rX   zSequence[Path]r¸  r   rE   )r`   ú
+Optional[str]r¸  úOptional[Path])r`   rº  r¸  r   )rv   r   r¸  r   )rv   r   r¸  r   )rŽ   r  r¸  rQ   )r¸  r%   )rž   r   r¸  r   )r£   r   r¤   r   r¸  r   )r£   r   r¨   r   r¸  r   )r¯   rº  r°   rº  r¸  rQ   )r¯   rº  r¸  rQ   )TT)
+rv   r   rÉ   r   rÊ   r%   rË   r%   r¸  r   )ré   r   r¸  úDict[str, Any])ré   r   r¸  r'   )rû   r   rü   r¼  r¸  r¼  )r  r   r£   r   r  r   rŽ   r  )r   rº  r¸  r   )r  r   r   r   r  r%   r¸  r%   )r   r   r¸  r   )
+r,  r  r   r   r   r   r   r   r¸  rQ   )ÚProgressé    )
+r7  r   r8  r   r9  r   r:  r  r¸  rQ   )rS  r   rÉ   r   rT  r   rU  r»  ré   r   rD  rº  rÓ   r   rV  r%   rW  r   r¸  zList[SegmentRecord])ri  z
+Sequence[str]r¸  r   )r\  zSequence[SegmentRecord]rW  r   r¸  r#   )rS  r   rÉ   r   rT  r   rU  r»  r‚  r   rD  rº  rÓ   r   rV  r%   rW  r   r¸  zTuple[str, QualityReport])r¸  zargparse.Namespace)r¸  rQ   )Ir   Ú
+__future__r   r•  rs   rò   r‹   r´   rœ   Ú
+dataclassesr   Ú pathlibr   Útypingr   r    r   r	   r
+   r
+   r™  rš  rœ  r›  r  rž  rŸ  r   r¡  r¢  r¥  r£  r¤  rA   r   r#   r1   r7   r<   rB   rO   rY   rb   ri   rx   r~   r€   r…   r   r—   rŸ   r¥   r©   r±   r¶   rÍ   rì   rî   rþ   r	  r  r  r'  r-  r1  rB  rc  rk  r~  r‰  r­  r¶  r   r   r    r!   Ú<module>rÃ     sÂ  ðñ
+õ #ã Û Û Û 	Û 
+Û 
+Ý !Ý ß =× =ð. €
+Ø€ØÐ ØÐ à€ØÐ Ø€
+ØÐ Ø€Ø€Ø€ð Ð ØÐ òÐ ð& 
+÷ð ó 
+ðð 
+÷ð ó 
+ðô
+:ôô )ôPô
+ô6öö8ôD
+-ô@ô<ôSô 1ôô$
+ô 5ô8ô)ô*
+
+ð  !Ø#ð	'Øð'àð'ð ð 'ð ð	'ð
+ 
+õ
+'ô\:ôzôNô/ô.*ôô, @ô ô	'ð Øð	Øðàðð 
+ð ð ð	ð
+ 
+õ
+ð@fØ
+ðfàðfð ð fð ð	fð
+ 
+ð
+fð ð
+fð 
+ðfð  $ðfð ðfð ôfôZ
+(ôAðD,%Ø
+ð,%àð,%ð ð ,%ð ð	,%ð
+ ð
+,%ð ð
+,%ð 
+ð,%ð  $ð,%ð ð,%ð ô,%ôf}ô@W ðt ˆzÓÙ…Fð r    

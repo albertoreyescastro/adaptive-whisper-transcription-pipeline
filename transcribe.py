@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 # This script can be used in two safe ways:
 #
 # 1) Professional CLI mode:
-#    python transcribirGITHUB.py --input "C:\path\to\audio.m4a"
+#    python transcribe.py --input "C:\path\to\audio.m4a"
 #
 # 2) Spyder-friendly mode:
 #    Create a folder called "whisper_input" on your Desktop or OneDrive Desktop.

@@ -220,7 +220,7 @@ def find_default_input_file(search_folder: Optional[str] = None) -> Path:
         "3) Run the script from Spyder.\n\n"
         "Alternative workflow:\n"
         "Run the script from Anaconda Prompt with:\n"
-        'python transcribirGITHUB.py --input "C:\\path\\to\\audio.m4a"\n\n'
+        'python transcribe.py --input "C:\\path\\to\\audio.m4a"\n\n'
         "Supported extensions:\n"
         f"{', '.join(SUPPORTED_INPUT_EXTENSIONS)}\n\n"
         "Dedicated input folders checked:\n"

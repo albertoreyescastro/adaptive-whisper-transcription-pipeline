@@ -4,6 +4,14 @@ A portable CPU/GPU transcription workflow for audio and video files using `faste
 
 This project provides a practical transcription pipeline with automatic hardware selection, safe input detection, audio normalisation, VAD presets, anti-repetition safeguards, streaming text output, a visual progress bar and optional SRT subtitle generation.
 
+## Demo
+
+A runnable Kaggle demo notebook is available here:
+
+[Open the Kaggle demo](https://www.kaggle.com/code/albertoreyescastro20/adaptive-whisper-transcription-pipeline-demo)
+
+The demo shows the pipeline workflow in a notebook environment, while this repository contains the reusable script version, configuration files and project documentation.
+
 ## Features
 
 - CPU/GPU-aware execution.

@@ -176,5 +176,4 @@ adaptive-whisper-transcription-pipeline/
 ## Author
 
 Alberto Reyes Castro  
-Physics graduate and MSc Artificial Intelligence student.
 

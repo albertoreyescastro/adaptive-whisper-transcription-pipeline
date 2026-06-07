@@ -12,6 +12,18 @@ A runnable Kaggle demo notebook is available here:
 
 The demo shows the pipeline workflow in a notebook environment, while this repository contains the reusable script version, configuration files and project documentation.
 
+## Scientific outreach context
+
+This tool was designed for long-form academic, scientific and outreach audio/video material, including lectures, interviews, talks, seminars and institutional communication content.
+
+One relevant scientific-outreach context is the Instituto de Astrofísica de Canarias:
+
+[IAC official website](https://www.iac.es/)
+
+[IAC news and outreach archive](https://www.iac.es/es/divulgacion/noticias)
+
+The repository does not include private audio, video files or real transcripts. Users provide their own input files locally.
+
 ## Features
 
 - CPU/GPU-aware execution.
@@ -36,7 +48,9 @@ The demo shows the pipeline workflow in a notebook environment, while this repos
 
 ## Project motivation
 
-This tool was designed as a practical transcription workflow for long-form academic, scientific and outreach audio/video material. It is intended to be usable both as a command-line tool and as a Spyder-friendly script on Windows.
+This tool was built as a practical transcription workflow for long-form academic, scientific and outreach audio/video material. It is intended to be usable both as a command-line tool and as a Spyder-friendly script on Windows.
+
+The pipeline focuses on reliability, safe local input handling and reusable outputs rather than being a one-off notebook experiment.
 
 ## Installation
 
@@ -161,5 +175,6 @@ adaptive-whisper-transcription-pipeline/
 
 ## Author
 
-Alberto Reyes Castro
+Alberto Reyes Castro  
+Physics graduate and MSc Artificial Intelligence student.
 

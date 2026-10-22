@@ -18,6 +18,16 @@ class FingerprintTests(unittest.TestCase):
             self.assertEqual(len(first), 12)
 
 
+class AudioUtilityTests(unittest.TestCase):
+    def test_parse_max_volume(self):
+        stderr = "[Parsed_volumedetect_0] max_volume: -3.4 dB\n"
+        self.assertEqual(transcribe._parse_max_volume_db(stderr), -3.4)
+
+    def test_parse_silent_volume(self):
+        stderr = "[Parsed_volumedetect_0] max_volume: -inf dB\n"
+        self.assertIsNone(transcribe._parse_max_volume_db(stderr))
+
+
 class FormattingTests(unittest.TestCase):
     def test_srt_timestamp(self):
         self.assertEqual(transcribe.srt_timestamp(61.234), "00:01:01,234")

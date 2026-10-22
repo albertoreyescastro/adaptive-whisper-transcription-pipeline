@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import inspect
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -294,6 +295,30 @@ def probe_audio_duration(path: Path, ffprobe_binary: str) -> float:
     return duration
 
 
+def _parse_max_volume_db(ffmpeg_stderr: str) -> Optional[float]:
+    """Extract `max_volume` from FFmpeg volumedetect output."""
+    match = re.search(r"max_volume:\s*(-?inf|[-+]?\d+(?:\.\d+)?)\s*dB", ffmpeg_stderr)
+    if not match or match.group(1) == "-inf":
+        return None
+    return float(match.group(1))
+
+
+def measure_peak_db(input_path: Path, ffmpeg_binary: str) -> Optional[float]:
+    """Measure peak level without loading the full media file into Python memory."""
+    command = [
+        ffmpeg_binary,
+        "-hide_banner",
+        "-nostats",
+        "-i", str(input_path),
+        "-vn",
+        "-af", "volumedetect",
+        "-f", "null",
+        os.devnull,
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=True)
+    return _parse_max_volume_db(result.stderr)
+
+
 def prepare_wav(
     input_path: Path,
     wav_path: Path,
@@ -328,10 +353,14 @@ def prepare_wav(
         "-c:a", "pcm_s16le",
     ]
     if normalize_audio:
-        # One-pass EBU R128 normalisation keeps preparation streaming and bounded
-        # in memory. It serves the same purpose as the original pydub normalise
-        # step while remaining suitable for long-form media.
-        command.extend(["-af", "loudnorm=I=-16:TP=-1.5:LRA=11"])
+        # The original implementation used pydub.effects.normalize(), a peak
+        # normaliser. Preserve that intent while keeping long-form preparation
+        # streaming: measure the peak in one FFmpeg pass, then apply the gain in
+        # the conversion pass with the same 0.1 dB headroom convention.
+        peak_db = measure_peak_db(input_path, ffmpeg_binary)
+        if peak_db is not None:
+            gain_db = -0.1 - peak_db
+            command.extend(["-af", f"volume={gain_db:.3f}dB"])
     command.append(str(wav_path))
 
     try:
@@ -739,7 +768,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--threads", type=int, default=DEFAULT_THREADS,
                         help="CPU threads for inference and OpenMP/MKL limits. Use 0 to leave defaults.")
     parser.add_argument("--no-normalize", action="store_true",
-                        help="Disable audio loudness normalisation before transcription.")
+                        help="Disable audio peak normalisation before transcription.")
     parser.add_argument("--no-reuse-wav", action="store_true",
                         help="Always recreate the intermediate WAV file.")
     parser.add_argument("--timestamps", action="store_true",

@@ -23,6 +23,7 @@ The Kaggle notebook is intentionally lighter than the local defaults so that it 
 - Hardware-aware inference with CPU/CUDA selection.
 - CTranslate2 compute-type selection (`int8` on CPU, `float16` on CUDA by default).
 - Long-form-friendly FFmpeg preprocessing without loading the entire media file into Python memory.
+- Streaming peak normalisation that preserves the intent of the original `pydub.normalize()` step.
 - Content-addressed WAV caching using a SHA-256 input fingerprint.
 - Safe local input discovery restricted to a dedicated `whisper_input` folder.
 - Preset-based decoding and bounded automatic fallback (`balanced → robust → no-vad`).
@@ -43,7 +44,7 @@ Safe input resolution
 SHA-256 cache identity
         │
         ▼
-FFmpeg → 16 kHz mono PCM16 WAV
+FFmpeg → peak normalisation → 16 kHz mono PCM16 WAV
         │
         ▼
 Hardware + compute selection
@@ -179,7 +180,7 @@ The pipeline accepts common FFmpeg-readable formats, including:
 
 ## Testing
 
-The CI suite intentionally avoids downloading large Whisper models. It checks deterministic pipeline logic such as cache identity, CLI validation, preset behaviour, formatting, quality gates and atomic fallback handling.
+The CI suite intentionally avoids downloading large Whisper models. It checks deterministic pipeline logic such as cache identity, audio-level parsing, CLI validation, preset behaviour, formatting, quality gates and atomic fallback handling.
 
 Run locally:
 
@@ -205,7 +206,7 @@ No private institutional audio, video or real internal transcripts are included 
 - Domain names, acronyms, noisy speech and overlapping speakers may still require review.
 - `large-v3` can require substantial GPU memory.
 - The first run may download model weights from Hugging Face.
-- One-pass FFmpeg loudness normalisation is pragmatic preprocessing, not a substitute for domain-specific audio conditioning.
+- Peak normalisation is pragmatic preprocessing, not a substitute for domain-specific audio conditioning.
 - No diarisation is performed.
 
 ## Privacy

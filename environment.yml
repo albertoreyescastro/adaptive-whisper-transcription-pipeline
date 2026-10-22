@@ -1,13 +1,10 @@
 name: adaptive-whisper-transcription
 channels:
   - conda-forge
-  - pytorch
 dependencies:
-  - python=3.10
+  - python>=3.10,<3.13
+  - ffmpeg>=6
   - pip
-  - ffmpeg
   - pip:
-      - faster-whisper>=1.0.0
-      - pydub>=0.25.1
-      - ctranslate2>=4.0.0
-      - torch
+      - faster-whisper>=1.1.0,<2.0
+      - ctranslate2>=4.4.0,<5.0

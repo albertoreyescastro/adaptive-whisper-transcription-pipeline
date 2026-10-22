@@ -6,6 +6,10 @@ __pycache__/
 venv/
 env/
 .env
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 # IDE
 .spyderproject
@@ -18,6 +22,7 @@ whisper_input/
 whisper_output/
 outputs/
 cache/
+*.attempt-*.tmp
 
 # Audio/video files
 *.wav

@@ -5,9 +5,9 @@ Adaptive Whisper Transcription Pipeline
 ======================================
 
 A portable CPU/GPU transcription workflow for audio and video files using
-faster-whisper. It includes automatic hardware selection, audio normalisation,
-VAD presets, anti-repetition safeguards, streaming text output, a visual progress
-bar and optional SRT subtitle generation.
+faster-whisper. It includes automatic hardware selection, streamed FFmpeg audio
+preparation, VAD presets, anti-repetition safeguards, streaming text output, a
+visual progress bar and optional SRT subtitle generation.
 
 Author: Alberto Reyes Castro
 """
@@ -19,6 +19,7 @@ import hashlib
 import inspect
 import os
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,19 +32,16 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 # This script can be used in two safe ways:
 #
 # 1) Professional CLI mode:
-#    python transcribe.py --input "C:\path\to\audio.m4a"
+#    python transcribe.py --input "C:\\path\\to\\audio.m4a"
 #
 # 2) Spyder-friendly mode:
 #    Create a folder called "whisper_input" on your Desktop or OneDrive Desktop.
 #    Put exactly ONE supported audio/video file inside it.
 #    Then run the script from Spyder.
 #
-# Recommended folder:
-#    C:\Users\<your_user>\OneDrive\Escritorio\whisper_input
-#
 # Safety rule:
 #    The script does NOT scan the whole Desktop, the current working directory,
-#    or the Spyder folder for random audio/video files.
+#    Downloads, or the Spyder folder for random audio/video files.
 
 DEFAULT_INPUT = None
 DEFAULT_OUTPUT = None
@@ -52,35 +50,20 @@ DEFAULT_SRT_OUTPUT = None
 
 DEFAULT_DEVICE = "auto"          # Options: "auto", "cpu", "cuda"
 DEFAULT_COMPUTE_TYPE = "auto"    # Options: "auto", "int8", "float16", "float32", etc.
-DEFAULT_MODEL = "auto"           # Options: "auto", "medium", "large-v3", or local model path
+DEFAULT_MODEL = "auto"           # CPU -> medium, CUDA -> large-v3
 DEFAULT_LANGUAGE = "auto"        # Use "auto", "en", "es", etc.
 DEFAULT_TASK = "transcribe"      # Options: "transcribe", "translate"
-DEFAULT_PRESET = "auto"          # Options: "auto", "fast", "balanced", "robust", "no-vad", "gpu-high-accuracy"
+DEFAULT_PRESET = "auto"          # balanced -> robust -> no-vad fallback sequence
 DEFAULT_THREADS = 8
 
-# Optional FFmpeg paths.
-# Leave them as None if FFmpeg already works from your environment/PATH.
 DEFAULT_FFMPEG_PATH = None
 DEFAULT_FFPROBE_PATH = None
 
 SUPPORTED_INPUT_EXTENSIONS = [
-    ".mp3",
-    ".mp4",
-    ".m4a",
-    ".wav",
-    ".mov",
-    ".mkv",
-    ".aac",
-    ".flac",
-    ".ogg",
-    ".webm",
-    ".wma",
+    ".mp3", ".mp4", ".m4a", ".wav", ".mov", ".mkv",
+    ".aac", ".flac", ".ogg", ".webm", ".wma",
 ]
 
-
-# ---------------------------------------------------------------------------
-# Data containers
-# ---------------------------------------------------------------------------
 
 @dataclass
 class SegmentRecord:
@@ -106,52 +89,37 @@ class QualityReport:
 def get_desktop_candidates() -> List[Path]:
     """Return likely Desktop folders across English/Spanish Windows setups."""
     home = Path.home()
-
     candidates = [
         home / "OneDrive" / "Escritorio",
         home / "OneDrive" / "Desktop",
         home / "Escritorio",
         home / "Desktop",
     ]
-
     return [path for path in candidates if path.exists()]
 
 
 def get_default_input_folders() -> List[Path]:
-    """
-    Return dedicated folders where the script is allowed to auto-detect files.
-
-    The script only auto-detects input files inside these folders.
-    It does not scan the full Desktop, Spyder folder or current directory.
-    """
-    folders: List[Path] = []
-
-    for desktop in get_desktop_candidates():
-        folders.append(desktop / "whisper_input")
-
-    return folders
+    """Return dedicated folders where automatic input detection is allowed."""
+    return [desktop / "whisper_input" for desktop in get_desktop_candidates()]
 
 
 def get_default_output_root() -> Path:
     """Return the default output folder."""
     desktop_candidates = get_desktop_candidates()
-
     if desktop_candidates:
         return desktop_candidates[0] / "whisper_output"
-
     return Path.cwd() / "whisper_output"
 
 
 def is_supported_input_file(path: Path) -> bool:
-    """Return True if the file extension is supported."""
+    """Return True if the file exists and has a supported extension."""
     return path.is_file() and path.suffix.lower() in SUPPORTED_INPUT_EXTENSIONS
 
 
 def list_supported_files(folder: Path) -> List[Path]:
-    """List supported audio/video files in a folder."""
+    """List supported audio/video files directly inside a folder."""
     if not folder.is_dir():
         return []
-
     return sorted(
         [path for path in folder.iterdir() if is_supported_input_file(path)],
         key=lambda item: item.name.lower(),
@@ -162,27 +130,18 @@ def format_path_list(paths: Sequence[Path]) -> str:
     """Format a list of paths for user-friendly console output."""
     if not paths:
         return "None"
-
     return "\n".join(f"  - {path}" for path in paths)
 
 
 def find_single_file_in_dedicated_input_folder(search_folder: Optional[str] = None) -> Optional[Path]:
-    """
-    Find exactly one supported file inside a dedicated input folder.
-
-    This is the only automatic detection mode. It prevents accidental
-    transcription of files from Desktop, Spyder, Downloads or any other folder.
-    """
+    """Find exactly one supported file inside a dedicated input folder."""
     folders = [Path(search_folder).expanduser()] if search_folder else get_default_input_folders()
-
     found_files: List[Path] = []
-
     for folder in folders:
         found_files.extend(list_supported_files(folder))
 
     if len(found_files) == 1:
         return found_files[0]
-
     if len(found_files) > 1:
         raise RuntimeError(
             "Multiple input files were found in the dedicated input folder(s).\n\n"
@@ -190,27 +149,15 @@ def find_single_file_in_dedicated_input_folder(search_folder: Optional[str] = No
             "or pass the input explicitly with --input.\n\n"
             f"Detected files:\n{format_path_list(found_files)}"
         )
-
     return None
 
 
 def find_default_input_file(search_folder: Optional[str] = None) -> Path:
-    """
-    Find a default input file safely.
-
-    Priority:
-    1) Exactly one supported file inside a dedicated 'whisper_input' folder.
-    2) Otherwise, stop and ask the user to provide --input.
-
-    This function does NOT scan the Desktop, Spyder folder or current directory.
-    """
+    """Find one safe default input file or fail with actionable guidance."""
     dedicated_file = find_single_file_in_dedicated_input_folder(search_folder=search_folder)
-
     if dedicated_file:
         print(f"✅ Auto-detected input file from dedicated folder: {dedicated_file}")
         return dedicated_file
-
-    default_input_folders = get_default_input_folders()
 
     raise FileNotFoundError(
         "No input file was provided and no safe default input file was found.\n\n"
@@ -219,46 +166,32 @@ def find_default_input_file(search_folder: Optional[str] = None) -> Path:
         "2) Put exactly ONE supported audio/video file inside it.\n"
         "3) Run the script from Spyder.\n\n"
         "Alternative workflow:\n"
-        "Run the script from Anaconda Prompt with:\n"
         'python transcribe.py --input "C:\\path\\to\\audio.m4a"\n\n'
-        "Supported extensions:\n"
-        f"{', '.join(SUPPORTED_INPUT_EXTENSIONS)}\n\n"
-        "Dedicated input folders checked:\n"
-        f"{format_path_list(default_input_folders)}"
+        f"Supported extensions: {', '.join(SUPPORTED_INPUT_EXTENSIONS)}\n\n"
+        f"Dedicated input folders checked:\n{format_path_list(get_default_input_folders())}"
     )
 
 
-def input_fingerprint(input_path: Path) -> str:
-    """
-    Create a short fingerprint from file path, size and modification time.
-
-    This prevents accidentally reusing an old WAV cache when the input extension
-    or content changes.
-    """
-    stat = input_path.stat()
-    raw = f"{input_path.resolve()}|{stat.st_size}|{stat.st_mtime_ns}".encode("utf-8")
-
-    return hashlib.md5(raw).hexdigest()[:10]
+def input_fingerprint(input_path: Path, chunk_size: int = 1024 * 1024) -> str:
+    """Return a short SHA-256 content fingerprint used for cache identity."""
+    digest = hashlib.sha256()
+    with input_path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()[:12]
 
 
 def default_txt_output_path(input_path: Path) -> Path:
-    """Create a default TXT output path based on the input file name."""
-    output_root = get_default_output_root()
-    return output_root / f"{input_path.stem}_transcription.txt"
+    return get_default_output_root() / f"{input_path.stem}_transcription.txt"
 
 
 def default_srt_output_path(input_path: Path) -> Path:
-    """Create a default SRT output path based on the input file name."""
-    output_root = get_default_output_root()
-    return output_root / f"{input_path.stem}_subtitles.srt"
+    return get_default_output_root() / f"{input_path.stem}_subtitles.srt"
 
 
 def default_wav_output_path(input_path: Path) -> Path:
-    """Create a unique intermediate WAV path based on the input file fingerprint."""
-    output_root = get_default_output_root()
     fingerprint = input_fingerprint(input_path)
-
-    return output_root / "cache" / f"{input_path.stem}_{fingerprint}_prepared.wav"
+    return get_default_output_root() / "cache" / f"{input_path.stem}_{fingerprint}_prepared.wav"
 
 
 # ---------------------------------------------------------------------------
@@ -266,38 +199,25 @@ def default_wav_output_path(input_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 def configure_threads(threads: int) -> None:
-    """Limit CPU thread usage for OpenMP/MKL-based libraries."""
+    """Limit CPU thread usage without enabling unsafe duplicate-runtime workarounds."""
     if threads <= 0:
         return
-
-    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
     os.environ["OMP_NUM_THREADS"] = str(threads)
     os.environ["MKL_NUM_THREADS"] = str(threads)
 
 
 def cuda_is_available() -> bool:
-    """Return True if a CUDA-capable device appears to be available."""
-    try:
-        import torch  # type: ignore
-
-        if torch.cuda.is_available():
-            return True
-    except Exception:
-        pass
-
+    """Return True if CTranslate2 can see at least one CUDA device."""
     try:
         import ctranslate2  # type: ignore
-
         return ctranslate2.get_cuda_device_count() > 0
     except Exception:
         return False
 
 
 def resolve_device(requested_device: str) -> str:
-    """Resolve 'auto' into either 'cuda' or 'cpu'."""
     if requested_device == "auto":
         return "cuda" if cuda_is_available() else "cpu"
-
     if requested_device == "cuda" and not cuda_is_available():
         print(
             "⚠️  CUDA was requested but no compatible CUDA device was detected. "
@@ -305,23 +225,18 @@ def resolve_device(requested_device: str) -> str:
             file=sys.stderr,
         )
         return "cpu"
-
     return requested_device
 
 
 def resolve_compute_type(device: str, requested_compute_type: str) -> str:
-    """Choose a sensible compute type for the selected hardware."""
     if requested_compute_type != "auto":
         return requested_compute_type
-
     return "float16" if device == "cuda" else "int8"
 
 
 def resolve_model(device: str, requested_model: str) -> str:
-    """Choose a sensible default model for CPU or GPU execution."""
     if requested_model != "auto":
         return requested_model
-
     return "large-v3" if device == "cuda" else "medium"
 
 
@@ -329,38 +244,54 @@ def resolve_model(device: str, requested_model: str) -> str:
 # FFmpeg and audio preparation
 # ---------------------------------------------------------------------------
 
-def configure_ffmpeg(ffmpeg_path: Optional[str], ffprobe_path: Optional[str]) -> None:
-    """Configure pydub to use explicit FFmpeg/FFprobe binaries when provided."""
-    from pydub import AudioSegment
-
-    if ffmpeg_path:
-        path = Path(ffmpeg_path).expanduser()
-
+def _resolve_executable(explicit_path: Optional[str], executable_name: str) -> str:
+    """Resolve an explicit binary path or a binary available on PATH."""
+    if explicit_path:
+        path = Path(explicit_path).expanduser()
         if not path.is_file():
-            raise FileNotFoundError(f"FFmpeg executable not found: {path}")
+            raise FileNotFoundError(f"{executable_name} executable not found: {path}")
+        return str(path)
 
-        AudioSegment.converter = str(path)
+    discovered = shutil.which(executable_name)
+    if discovered:
+        return discovered
 
-    if ffprobe_path:
-        path = Path(ffprobe_path).expanduser()
+    raise FileNotFoundError(
+        f"{executable_name} was not found. Install FFmpeg or pass an explicit "
+        f"--{executable_name}-path."
+    )
 
-        if not path.is_file():
-            raise FileNotFoundError(f"FFprobe executable not found: {path}")
 
-        AudioSegment.ffprobe = str(path)
+def configure_ffmpeg(ffmpeg_path: Optional[str], ffprobe_path: Optional[str]) -> Tuple[str, str]:
+    """Validate and resolve FFmpeg/FFprobe binaries."""
+    return (
+        _resolve_executable(ffmpeg_path, "ffmpeg"),
+        _resolve_executable(ffprobe_path, "ffprobe"),
+    )
 
 
 def ensure_ffmpeg_available(ffmpeg_path: Optional[str]) -> None:
-    """Warn the user if FFmpeg is not visible from PATH and no explicit path is set."""
-    if ffmpeg_path:
-        return
+    """Retained for backwards compatibility; raises if FFmpeg is unavailable."""
+    _resolve_executable(ffmpeg_path, "ffmpeg")
 
-    if shutil.which("ffmpeg") is None:
-        print(
-            "⚠️  FFmpeg was not found in PATH. If audio extraction fails, install FFmpeg "
-            "or pass --ffmpeg-path and --ffprobe-path.",
-            file=sys.stderr,
-        )
+
+def probe_audio_duration(path: Path, ffprobe_binary: str) -> float:
+    """Read media duration through ffprobe without loading the media into RAM."""
+    command = [
+        ffprobe_binary,
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(path),
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, check=True)
+    try:
+        duration = float(result.stdout.strip())
+    except ValueError as exc:
+        raise RuntimeError(f"Could not determine audio duration for: {path}") from exc
+    if duration <= 0:
+        raise RuntimeError(f"Invalid media duration reported for: {path}")
+    return duration
 
 
 def prepare_wav(
@@ -368,41 +299,48 @@ def prepare_wav(
     wav_path: Path,
     normalize_audio: bool = True,
     reuse_existing_wav: bool = True,
+    ffmpeg_binary: Optional[str] = None,
+    ffprobe_binary: Optional[str] = None,
 ) -> float:
-    """
-    Convert any audio/video input into WAV 16 kHz mono PCM16.
-
-    Returns
-    -------
-    float
-        Audio duration in seconds.
-    """
-    from pydub import AudioSegment, effects
-
+    """Stream-convert audio/video to WAV 16 kHz mono PCM16 using FFmpeg."""
     if not input_path.is_file():
         raise FileNotFoundError(f"Input file not found: {input_path}")
 
+    ffmpeg_binary = ffmpeg_binary or _resolve_executable(None, "ffmpeg")
+    ffprobe_binary = ffprobe_binary or _resolve_executable(None, "ffprobe")
+
     if reuse_existing_wav and wav_path.is_file() and wav_path.stat().st_size > 0:
         print(f"✅ Reusing existing WAV: {wav_path}")
-        audio = AudioSegment.from_file(str(wav_path))
-        return len(audio) / 1000.0
+        return probe_audio_duration(wav_path, ffprobe_binary)
 
     print("🔄 Preparing audio as WAV 16 kHz mono PCM16...")
     wav_path.parent.mkdir(parents=True, exist_ok=True)
 
-    audio = AudioSegment.from_file(str(input_path))
-    audio = audio.set_channels(1).set_frame_rate(16000).set_sample_width(2)
-
+    command = [
+        ffmpeg_binary,
+        "-y",
+        "-hide_banner",
+        "-loglevel", "error",
+        "-i", str(input_path),
+        "-vn",
+        "-ac", "1",
+        "-ar", "16000",
+        "-c:a", "pcm_s16le",
+    ]
     if normalize_audio:
-        audio = effects.normalize(audio)
+        # One-pass EBU R128 normalisation keeps preparation streaming and bounded
+        # in memory. It serves the same purpose as the original pydub normalise
+        # step while remaining suitable for long-form media.
+        command.extend(["-af", "loudnorm=I=-16:TP=-1.5:LRA=11"])
+    command.append(str(wav_path))
 
-    audio.export(
-        str(wav_path),
-        format="wav",
-        parameters=["-acodec", "pcm_s16le"],
-    )
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as exc:
+        wav_path.unlink(missing_ok=True)
+        raise RuntimeError(f"FFmpeg failed while preparing: {input_path}") from exc
 
-    return len(audio) / 1000.0
+    return probe_audio_duration(wav_path, ffprobe_binary)
 
 
 # ---------------------------------------------------------------------------
@@ -426,26 +364,17 @@ def get_preset_options(preset: str) -> Dict[str, Any]:
             **base,
             "beam_size": 1,
             "vad_filter": True,
-            "vad_parameters": {
-                "min_silence_duration_ms": 300,
-                "speech_pad_ms": 150,
-            },
+            "vad_parameters": {"min_silence_duration_ms": 300, "speech_pad_ms": 150},
         },
         "balanced": {
             **base,
             "vad_filter": True,
-            "vad_parameters": {
-                "min_silence_duration_ms": 500,
-                "speech_pad_ms": 200,
-            },
+            "vad_parameters": {"min_silence_duration_ms": 500, "speech_pad_ms": 200},
         },
         "robust": {
             **base,
             "vad_filter": True,
-            "vad_parameters": {
-                "min_silence_duration_ms": 700,
-                "speech_pad_ms": 300,
-            },
+            "vad_parameters": {"min_silence_duration_ms": 700, "speech_pad_ms": 300},
             "no_repeat_ngram_size": 3,
             "repetition_penalty": 1.10,
         },
@@ -455,26 +384,21 @@ def get_preset_options(preset: str) -> Dict[str, Any]:
         },
         "gpu-high-accuracy": {
             **base,
-            "beam_size": 5,
+            "beam_size": 8,
+            "patience": 1.2,
             "vad_filter": True,
-            "vad_parameters": {
-                "min_silence_duration_ms": 500,
-                "speech_pad_ms": 200,
-            },
+            "vad_parameters": {"min_silence_duration_ms": 500, "speech_pad_ms": 300},
         },
     }
 
     if preset not in presets:
         raise ValueError(f"Unknown preset: {preset}")
-
     return presets[preset]
 
 
 def preset_sequence(preset: str) -> List[str]:
-    """Return the preset order used by normal and automatic modes."""
     if preset == "auto":
         return ["balanced", "robust", "no-vad"]
-
     return [preset]
 
 
@@ -490,10 +414,8 @@ def filter_supported_kwargs(callable_obj: Any, kwargs: Dict[str, Any]) -> Dict[s
         return kwargs
 
     parameters = signature.parameters
-
     if any(param.kind == inspect.Parameter.VAR_KEYWORD for param in parameters.values()):
         return kwargs
-
     return {key: value for key, value in kwargs.items() if key in parameters}
 
 
@@ -503,36 +425,25 @@ def load_model(model_source: str, device: str, compute_type: str, threads: int):
 
     model_path = Path(model_source).expanduser()
     source = str(model_path) if model_path.is_dir() else model_source
-
-    init_kwargs: Dict[str, Any] = {
-        "device": device,
-        "compute_type": compute_type,
-    }
-
+    init_kwargs: Dict[str, Any] = {"device": device, "compute_type": compute_type}
     if device == "cpu" and threads > 0:
         init_kwargs["cpu_threads"] = threads
-
     init_kwargs = filter_supported_kwargs(WhisperModel.__init__, init_kwargs)
 
     print(f"⏳ Loading model: {source}")
     print(f"🖥️  Device: {device} | compute_type: {compute_type}")
-
     return WhisperModel(source, **init_kwargs)
 
 
 def clean_segment_text(text: Optional[str]) -> str:
-    """Normalise whitespace in a transcription segment."""
     if not text:
         return ""
-
     return " ".join(text.strip().split())
 
 
 def should_skip_segment(segment: Any, text: str, strict_filtering: bool) -> bool:
-    """Apply optional filters for likely hallucinated or low-confidence segments."""
     if not text:
         return True
-
     if not strict_filtering:
         return False
 
@@ -543,69 +454,44 @@ def should_skip_segment(segment: Any, text: str, strict_filtering: bool) -> bool
     if no_speech_prob is not None and avg_logprob is not None:
         if no_speech_prob > 0.80 and avg_logprob < -1.0:
             return True
-
     if compression_ratio is not None and compression_ratio > 2.4:
         return True
-
     return False
 
 
 def srt_timestamp(seconds: float) -> str:
-    """Format seconds as an SRT timestamp."""
     milliseconds = int(round(seconds * 1000))
     hours, remainder = divmod(milliseconds, 3_600_000)
     minutes, remainder = divmod(remainder, 60_000)
     secs, millis = divmod(remainder, 1000)
-
     return f"{hours:02d}:{minutes:02d}:{secs:02d},{millis:03d}"
 
 
 def write_srt_block(handle, index: int, start: float, end: float, text: str) -> None:
-    """Write one SRT subtitle block."""
     handle.write(f"{index}\n")
     handle.write(f"{srt_timestamp(start)} --> {srt_timestamp(end)}\n")
     handle.write(f"{text}\n\n")
 
 
 def format_duration(seconds: float) -> str:
-    """Format seconds as MM:SS or HH:MM:SS."""
     seconds = int(max(0, seconds))
     hours, remainder = divmod(seconds, 3600)
     minutes, secs = divmod(remainder, 60)
-
     if hours > 0:
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
-
     return f"{minutes:02d}:{secs:02d}"
 
 
-def print_progress_bar(
-    current_time: float,
-    total_time: float,
-    prefix: str = "Progress",
-    width: int = 32,
-) -> None:
-    """
-    Print a terminal progress bar based on the current audio timestamp.
-
-    This is not a low-level model progress indicator. It estimates progress
-    using the end time of the latest transcribed segment.
-    """
+def print_progress_bar(current_time: float, total_time: float, prefix: str = "Progress", width: int = 32) -> None:
+    """Print timestamp-based estimated audio coverage progress."""
     if total_time <= 0:
         return
-
     ratio = min(max(current_time / total_time, 0.0), 1.0)
     filled = int(width * ratio)
-    empty = width - filled
-
-    bar = "█" * filled + "░" * empty
-    percent = ratio * 100
-
-    current_label = format_duration(current_time)
-    total_label = format_duration(total_time)
-
+    bar = "█" * filled + "░" * (width - filled)
     print(
-        f"\r{prefix}: |{bar}| {percent:5.1f}%  {current_label} / {total_label}",
+        f"\r{prefix}: |{bar}| {ratio * 100:5.1f}%  "
+        f"{format_duration(current_time)} / {format_duration(total_time)}",
         end="",
         flush=True,
     )
@@ -625,10 +511,8 @@ def transcribe_once(
     """Run one transcription attempt and stream the result to output files."""
     options = get_preset_options(preset)
     options["task"] = task
-
     if language is not None:
         options["language"] = language
-
     options = filter_supported_kwargs(model.transcribe, options)
 
     print(f"🎙️  Transcribing with preset: {preset}")
@@ -636,14 +520,12 @@ def transcribe_once(
 
     if hasattr(info, "language"):
         probability = getattr(info, "language_probability", None)
-
         if probability is not None:
             print(f"🌍 Detected language: {info.language} ({probability:.2f})")
         else:
             print(f"🌍 Detected language: {info.language}")
 
     output_txt.parent.mkdir(parents=True, exist_ok=True)
-
     if output_srt:
         output_srt.parent.mkdir(parents=True, exist_ok=True)
 
@@ -652,20 +534,17 @@ def transcribe_once(
     last_text = ""
     repeat_streak = 0
     last_progress_time = 0.0
-
     srt_handle = open(output_srt, "w", encoding="utf-8") if output_srt else None
 
     try:
         with open(output_txt, "w", encoding="utf-8") as txt_handle:
             for raw_segment in segments_iterator:
                 text = clean_segment_text(getattr(raw_segment, "text", ""))
-
                 if should_skip_segment(raw_segment, text, strict_filtering):
                     continue
 
                 if text == last_text:
                     repeat_streak += 1
-
                     if repeat_streak >= 2:
                         continue
                 else:
@@ -674,7 +553,6 @@ def transcribe_once(
 
                 start = float(getattr(raw_segment, "start", 0.0))
                 end = float(getattr(raw_segment, "end", start))
-
                 record = SegmentRecord(start=start, end=end, text=text)
                 records.append(record)
 
@@ -682,37 +560,23 @@ def transcribe_once(
                     txt_handle.write(f"[{srt_timestamp(start)} --> {srt_timestamp(end)}] {text}\n")
                 else:
                     txt_handle.write(text + "\n")
-
                 txt_handle.flush()
 
                 if srt_handle:
                     write_srt_block(srt_handle, len(records), start, end, text)
                     srt_handle.flush()
 
-                # Visual progress bar. The update is throttled slightly so the
-                # console remains readable even for very short segments.
                 if end - last_progress_time >= 2.0 or len(records) == 1:
-                    print_progress_bar(
-                        current_time=end,
-                        total_time=audio_duration,
-                        prefix=f"Transcribing ({preset})",
-                    )
+                    print_progress_bar(end, audio_duration, prefix=f"Transcribing ({preset})")
                     last_progress_time = end
-
     finally:
         if srt_handle:
             srt_handle.close()
 
     if records:
-        print_progress_bar(
-            current_time=max(record.end for record in records),
-            total_time=audio_duration,
-            prefix=f"Transcribing ({preset})",
-        )
-
+        print_progress_bar(audio_duration, audio_duration, prefix=f"Transcribing ({preset})")
     print()
     print(f"✅ Segments written: {len(records)}")
-
     return records
 
 
@@ -721,22 +585,17 @@ def transcribe_once(
 # ---------------------------------------------------------------------------
 
 def lexical_diversity(texts: Sequence[str]) -> float:
-    """Return a simple unique-word ratio for the transcription."""
     words: List[str] = []
-
     for text in texts:
         words.extend(word.lower() for word in text.split() if word.strip())
-
     if not words:
         return 0.0
-
     return len(set(words)) / len(words)
 
 
 def assess_transcription(records: Sequence[SegmentRecord], audio_duration: float) -> QualityReport:
-    """Detect common failure modes: empty output, early stop and repetition loops."""
+    """Detect common failure modes; this is not an accuracy metric."""
     issues: List[str] = []
-
     if not records:
         return QualityReport(False, ["no transcription segments were produced"])
 
@@ -746,25 +605,37 @@ def assess_transcription(records: Sequence[SegmentRecord], audio_duration: float
 
     if audio_duration > 20 and total_chars < 80:
         issues.append("transcription is unexpectedly short")
-
     if audio_duration > 60 and last_end < audio_duration * 0.45:
         issues.append("transcription appears to stop too early")
 
-    repeated_lines = sum(
-        1 for previous, current in zip(texts, texts[1:])
-        if previous == current
-    )
-
+    repeated_lines = sum(1 for previous, current in zip(texts, texts[1:]) if previous == current)
     if len(texts) >= 10 and repeated_lines / max(1, len(texts) - 1) > 0.20:
         issues.append("many consecutive repeated segments detected")
 
     diversity = lexical_diversity(texts)
     word_count = sum(len(text.split()) for text in texts)
-
     if word_count > 80 and diversity < 0.18:
         issues.append("very low lexical diversity; possible repetition loop")
 
     return QualityReport(passed=len(issues) == 0, issues=issues)
+
+
+def _temporary_attempt_path(final_path: Optional[Path], attempt_index: int, preset: str) -> Optional[Path]:
+    if final_path is None:
+        return None
+    return final_path.with_name(f".{final_path.name}.attempt-{attempt_index}-{preset}.tmp")
+
+
+def _promote_attempt(temp_path: Optional[Path], final_path: Optional[Path]) -> None:
+    if temp_path is None or final_path is None:
+        return
+    final_path.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(temp_path, final_path)
+
+
+def _cleanup_attempt(path: Optional[Path]) -> None:
+    if path is not None:
+        path.unlink(missing_ok=True)
 
 
 def transcribe_with_fallbacks(
@@ -778,7 +649,7 @@ def transcribe_with_fallbacks(
     include_timestamps_in_txt: bool,
     audio_duration: float,
 ) -> Tuple[str, QualityReport]:
-    """Run the requested preset and retry with safer presets when needed."""
+    """Run retries without replacing the last good outputs until an attempt finishes."""
     attempts = preset_sequence(requested_preset)
     last_report = QualityReport(False, ["not attempted"])
     final_preset = attempts[-1]
@@ -787,29 +658,39 @@ def transcribe_with_fallbacks(
         if attempt_index > 1:
             print(f"\n🔁 Retrying with fallback preset: {preset}")
 
-        records = transcribe_once(
-            model=model,
-            wav_path=wav_path,
-            output_txt=output_txt,
-            output_srt=output_srt,
-            preset=preset,
-            language=language,
-            task=task,
-            include_timestamps_in_txt=include_timestamps_in_txt,
-            audio_duration=audio_duration,
-        )
+        temp_txt = _temporary_attempt_path(output_txt, attempt_index, preset)
+        temp_srt = _temporary_attempt_path(output_srt, attempt_index, preset)
+        assert temp_txt is not None
 
-        report = assess_transcription(records, audio_duration)
-        final_preset = preset
-        last_report = report
+        try:
+            records = transcribe_once(
+                model=model,
+                wav_path=wav_path,
+                output_txt=temp_txt,
+                output_srt=temp_srt,
+                preset=preset,
+                language=language,
+                task=task,
+                include_timestamps_in_txt=include_timestamps_in_txt,
+                audio_duration=audio_duration,
+            )
+            report = assess_transcription(records, audio_duration)
+            final_preset = preset
+            last_report = report
 
-        if report.passed or requested_preset != "auto":
-            break
+            is_last_attempt = attempt_index == len(attempts)
+            should_finish = report.passed or requested_preset != "auto" or is_last_attempt
+            if should_finish:
+                _promote_attempt(temp_txt, output_txt)
+                _promote_attempt(temp_srt, output_srt)
+                break
 
-        print("⚠️  Possible quality issues detected:")
-
-        for issue in report.issues:
-            print(f"   - {issue}")
+            print("⚠️  Possible quality issues detected:")
+            for issue in report.issues:
+                print(f"   - {issue}")
+        finally:
+            _cleanup_attempt(temp_txt)
+            _cleanup_attempt(temp_srt)
 
     return final_preset, last_report
 
@@ -818,160 +699,79 @@ def transcribe_with_fallbacks(
 # CLI / Spyder-friendly argument handling
 # ---------------------------------------------------------------------------
 
-def parse_args() -> argparse.Namespace:
+def _running_inside_spyder() -> bool:
+    return any(name == "spyder_kernels" or name.startswith("spyder_kernels.") for name in sys.modules)
+
+
+def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Adaptive CPU/GPU Whisper transcription pipeline using faster-whisper.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    parser.add_argument("-i", "--input", default=DEFAULT_INPUT,
+                        help="Input audio/video file. If omitted, checks only the dedicated whisper_input folder.")
+    parser.add_argument("-o", "--output", default=DEFAULT_OUTPUT,
+                        help="Output TXT file. If omitted, a default output path is created.")
+    parser.add_argument("--srt-output", default=DEFAULT_SRT_OUTPUT,
+                        help="Optional SRT subtitle output path.")
+    parser.add_argument("--wav-output", default=DEFAULT_WAV_OUTPUT,
+                        help="Optional intermediate WAV path. If omitted, a content-addressed cache path is created.")
+    parser.add_argument("--input-folder", default=None,
+                        help="Optional dedicated folder used for safe input auto-detection.")
+    parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default=DEFAULT_DEVICE,
+                        help="Execution device.")
+    parser.add_argument("--compute-type", default=DEFAULT_COMPUTE_TYPE,
+                        help="CTranslate2 compute type, e.g. auto, int8, float16, float32 or int8_float16.")
+    parser.add_argument("--model", default=DEFAULT_MODEL,
+                        help="Model name or local model directory. Use auto for CPU/GPU-aware defaults.")
+    parser.add_argument("--language", default=DEFAULT_LANGUAGE,
+                        help="Language code such as en or es. Use auto for automatic detection.")
+    parser.add_argument("--task", choices=["transcribe", "translate"], default=DEFAULT_TASK,
+                        help="Keep the original language or translate to English.")
+    parser.add_argument("--preset",
+                        choices=["auto", "fast", "balanced", "robust", "no-vad", "gpu-high-accuracy"],
+                        default=DEFAULT_PRESET,
+                        help="Behaviour preset. Auto tries balanced, robust, then no-vad if sanity checks fail.")
+    parser.add_argument("--ffmpeg-path", default=DEFAULT_FFMPEG_PATH,
+                        help="Optional explicit path to ffmpeg executable.")
+    parser.add_argument("--ffprobe-path", default=DEFAULT_FFPROBE_PATH,
+                        help="Optional explicit path to ffprobe executable.")
+    parser.add_argument("--threads", type=int, default=DEFAULT_THREADS,
+                        help="CPU threads for inference and OpenMP/MKL limits. Use 0 to leave defaults.")
+    parser.add_argument("--no-normalize", action="store_true",
+                        help="Disable audio loudness normalisation before transcription.")
+    parser.add_argument("--no-reuse-wav", action="store_true",
+                        help="Always recreate the intermediate WAV file.")
+    parser.add_argument("--timestamps", action="store_true",
+                        help="Include timestamps in the TXT output.")
+    return parser
 
-    parser.add_argument(
-        "-i",
-        "--input",
-        required=False,
-        default=DEFAULT_INPUT,
-        help="Input audio/video file. If omitted, the script checks only the dedicated whisper_input folder.",
-    )
 
-    parser.add_argument(
-        "-o",
-        "--output",
-        default=DEFAULT_OUTPUT,
-        help="Output TXT file. If omitted, a default output path is created.",
-    )
-
-    parser.add_argument(
-        "--srt-output",
-        default=DEFAULT_SRT_OUTPUT,
-        help="Optional SRT subtitle output path.",
-    )
-
-    parser.add_argument(
-        "--wav-output",
-        default=DEFAULT_WAV_OUTPUT,
-        help="Optional intermediate WAV path. If omitted, a unique cache path is created.",
-    )
-
-    parser.add_argument(
-        "--input-folder",
-        default=None,
-        help="Optional dedicated folder used for safe input auto-detection.",
-    )
-
-    parser.add_argument(
-        "--device",
-        choices=["auto", "cpu", "cuda"],
-        default=DEFAULT_DEVICE,
-        help="Execution device.",
-    )
-
-    parser.add_argument(
-        "--compute-type",
-        default=DEFAULT_COMPUTE_TYPE,
-        help="CTranslate2 compute type, for example auto, int8, float16, float32 or int8_float16.",
-    )
-
-    parser.add_argument(
-        "--model",
-        default=DEFAULT_MODEL,
-        help="Model name or local model directory. Use auto for CPU/GPU-aware defaults.",
-    )
-
-    parser.add_argument(
-        "--language",
-        default=DEFAULT_LANGUAGE,
-        help="Language code such as en or es. Use auto for automatic detection.",
-    )
-
-    parser.add_argument(
-        "--task",
-        choices=["transcribe", "translate"],
-        default=DEFAULT_TASK,
-        help="Use transcribe to keep the original language, or translate to English.",
-    )
-
-    parser.add_argument(
-        "--preset",
-        choices=["auto", "fast", "balanced", "robust", "no-vad", "gpu-high-accuracy"],
-        default=DEFAULT_PRESET,
-        help="Transcription behaviour preset. Auto tries balanced, then robust, then no-vad if needed.",
-    )
-
-    parser.add_argument(
-        "--ffmpeg-path",
-        default=DEFAULT_FFMPEG_PATH,
-        help="Optional explicit path to ffmpeg.exe.",
-    )
-
-    parser.add_argument(
-        "--ffprobe-path",
-        default=DEFAULT_FFPROBE_PATH,
-        help="Optional explicit path to ffprobe.exe.",
-    )
-
-    parser.add_argument(
-        "--threads",
-        type=int,
-        default=DEFAULT_THREADS,
-        help="CPU threads for CPU inference and OpenMP/MKL limits. Use 0 to leave defaults.",
-    )
-
-    parser.add_argument(
-        "--no-normalize",
-        action="store_true",
-        help="Disable audio volume normalisation before transcription.",
-    )
-
-    parser.add_argument(
-        "--no-reuse-wav",
-        action="store_true",
-        help="Always recreate the intermediate WAV file.",
-    )
-
-    parser.add_argument(
-        "--timestamps",
-        action="store_true",
-        help="Include timestamps in the TXT output.",
-    )
-
-    # parse_known_args prevents Spyder/IPython arguments from crashing the script.
-    args, unknown_args = parser.parse_known_args()
-
-    if unknown_args:
-        print("⚠️  Ignoring unknown arguments added by the IDE:", unknown_args)
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    """Parse strictly in CLI mode; tolerate IDE-injected arguments only in Spyder."""
+    parser = build_argument_parser()
+    if argv is None and _running_inside_spyder():
+        args, unknown_args = parser.parse_known_args()
+        if unknown_args:
+            print("⚠️  Ignoring arguments injected by Spyder:", unknown_args)
+    else:
+        args = parser.parse_args(argv)
 
     if not args.input:
         detected_input = find_default_input_file(search_folder=args.input_folder)
         args.input = str(detected_input)
-
     return args
 
 
-def main() -> None:
-    args = parse_args()
-
+def main(argv: Optional[Sequence[str]] = None) -> None:
+    args = parse_args(argv)
     configure_threads(args.threads)
-    configure_ffmpeg(args.ffmpeg_path, args.ffprobe_path)
-    ensure_ffmpeg_available(args.ffmpeg_path)
+    ffmpeg_binary, ffprobe_binary = configure_ffmpeg(args.ffmpeg_path, args.ffprobe_path)
 
     input_path = Path(args.input).expanduser().resolve()
-
-    output_txt = (
-        Path(args.output).expanduser().resolve()
-        if args.output
-        else default_txt_output_path(input_path).resolve()
-    )
-
-    output_srt = (
-        Path(args.srt_output).expanduser().resolve()
-        if args.srt_output
-        else None
-    )
-
-    wav_path = (
-        Path(args.wav_output).expanduser().resolve()
-        if args.wav_output
-        else default_wav_output_path(input_path).resolve()
-    )
+    output_txt = Path(args.output).expanduser().resolve() if args.output else default_txt_output_path(input_path).resolve()
+    output_srt = Path(args.srt_output).expanduser().resolve() if args.srt_output else None
+    wav_path = Path(args.wav_output).expanduser().resolve() if args.wav_output else default_wav_output_path(input_path).resolve()
 
     device = resolve_device(args.device)
     compute_type = resolve_compute_type(device, args.compute_type)
@@ -982,10 +782,8 @@ def main() -> None:
     print(f"Input:        {input_path}")
     print(f"Output TXT:   {output_txt}")
     print(f"WAV file:     {wav_path}")
-
     if output_srt:
         print(f"Output SRT:   {output_srt}")
-
     print(f"Device:       {device}")
     print(f"Compute type: {compute_type}")
     print(f"Model:        {model_source}")
@@ -997,17 +795,12 @@ def main() -> None:
         wav_path=wav_path,
         normalize_audio=not args.no_normalize,
         reuse_existing_wav=not args.no_reuse_wav,
+        ffmpeg_binary=ffmpeg_binary,
+        ffprobe_binary=ffprobe_binary,
     )
-
     print(f"⏱️  Audio duration: {audio_duration:.1f}s")
 
-    model = load_model(
-        model_source=model_source,
-        device=device,
-        compute_type=compute_type,
-        threads=args.threads,
-    )
-
+    model = load_model(model_source, device, compute_type, args.threads)
     final_preset, report = transcribe_with_fallbacks(
         model=model,
         wav_path=wav_path,
@@ -1023,15 +816,12 @@ def main() -> None:
     print("\n=== Completed ===")
     print(f"Final preset: {final_preset}")
     print(f"TXT saved to: {output_txt}")
-
     if output_srt:
         print(f"SRT saved to: {output_srt}")
-
     if report.passed:
-        print("Quality check: passed")
+        print("Quality sanity check: passed")
     else:
-        print("Quality check: review recommended")
-
+        print("Quality sanity check: review recommended")
         for issue in report.issues:
             print(f"- {issue}")
 

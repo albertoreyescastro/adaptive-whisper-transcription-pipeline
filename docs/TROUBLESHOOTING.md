@@ -4,13 +4,10 @@
 
 Install FFmpeg and make sure both `ffmpeg` and `ffprobe` are available on your system `PATH`.
 
-You can also pass explicit paths:
+On Windows, you can also pass explicit paths in a single PowerShell/CMD-safe command:
 
-```bash
-python transcribe.py \
-  --input "C:\path\to\audio.m4a" \
-  --ffmpeg-path "C:\path\to\ffmpeg.exe" \
-  --ffprobe-path "C:\path\to\ffprobe.exe"
+```powershell
+python transcribe.py --input "C:\path\to\audio.m4a" --ffmpeg-path "C:\path\to\ffmpeg.exe" --ffprobe-path "C:\path\to\ffprobe.exe"
 ```
 
 ## The script cannot find an input file in Spyder
@@ -27,7 +24,7 @@ The script deliberately does not scan your full Desktop, Downloads, current work
 
 Leave only one supported file inside `whisper_input`, or pass the file explicitly:
 
-```bash
+```powershell
 python transcribe.py --input "C:\path\to\audio.m4a"
 ```
 
@@ -35,7 +32,7 @@ python transcribe.py --input "C:\path\to\audio.m4a"
 
 Normal CLI execution is intentionally strict so spelling mistakes are not ignored. Check the available options:
 
-```bash
+```powershell
 python transcribe.py --help
 ```
 
@@ -45,17 +42,21 @@ Spyder-injected runtime arguments are handled separately when Spyder is detected
 
 This project uses CTranslate2 as the hardware check; PyTorch is not required just to detect CUDA.
 
-```bash
+```powershell
 python -c "import ctranslate2; print(ctranslate2.get_cuda_device_count())"
 ```
 
-If CUDA is unavailable, `--device auto` falls back to CPU using `medium` and `int8` by default.
+If `--device auto` finds no CUDA device, the pipeline uses CPU with `medium` and `int8` by default.
+
+If you explicitly request `--device cuda` but CUDA is unavailable, the pipeline falls back to CPU and resets the compute type to CPU-safe `int8`, even if a CUDA-oriented compute type such as `float16` was supplied.
 
 ## CTranslate2 reports a CUDA/cuDNN runtime error
 
-GPU execution depends on a compatible NVIDIA driver/CUDA/cuDNN combination for the installed CTranslate2 build. Confirm the CTranslate2 installation guidance for your platform. As a safe fallback, run:
+GPU runtime requirements can change across CTranslate2 releases. Check the current faster-whisper and CTranslate2 installation/compatibility notes for the version you installed rather than relying on a hard-coded CUDA/cuDNN combination.
 
-```bash
+As a safe fallback:
+
+```powershell
 python transcribe.py --input "C:\path\to\audio.m4a" --device cpu --compute-type int8
 ```
 
@@ -67,13 +68,13 @@ The pipeline intentionally does **not** set `KMP_DUPLICATE_LIB_OK=TRUE` automati
 
 Try disabling VAD:
 
-```bash
+```powershell
 python transcribe.py --input "C:\path\to\audio.m4a" --preset no-vad
 ```
 
 Or allow bounded automatic retry:
 
-```bash
+```powershell
 python transcribe.py --input "C:\path\to\audio.m4a" --preset auto
 ```
 
@@ -81,7 +82,7 @@ python transcribe.py --input "C:\path\to\audio.m4a" --preset auto
 
 Try robust mode:
 
-```bash
+```powershell
 python transcribe.py --input "C:\path\to\audio.m4a" --preset robust
 ```
 
@@ -89,24 +90,34 @@ python transcribe.py --input "C:\path\to\audio.m4a" --preset robust
 
 Force a language code:
 
-```bash
+```powershell
 python transcribe.py --input "C:\path\to\audio.m4a" --language es
 ```
 
 or:
 
-```bash
+```powershell
 python transcribe.py --input "C:\path\to\audio.m4a" --language en
 ```
 
 ## A cached WAV seems wrong
 
-Prepared WAV files are keyed by a SHA-256 content fingerprint. To force regeneration anyway:
+Prepared WAV cache filenames include:
 
-```bash
+- a SHA-256 fingerprint of the source media,
+- a preprocessing profile version,
+- whether peak normalisation was enabled.
+
+This prevents a normalised run from silently reusing an unnormalised cached WAV, or vice versa.
+
+To force regeneration anyway:
+
+```powershell
 python transcribe.py --input "C:\path\to\audio.m4a" --no-reuse-wav
 ```
 
 ## The quality sanity check passes but words are still wrong
 
 That is expected: the built-in check detects obvious structural failures such as empty output, early stopping and repetition loops. It does **not** measure WER/CER and should not be interpreted as a transcription-accuracy guarantee.
+
+The exact checks are threshold-dependent; on a very short sample, some long-duration or high-segment-count heuristics may not apply.

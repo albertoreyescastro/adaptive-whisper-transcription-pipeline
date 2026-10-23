@@ -17,11 +17,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import inspect
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -42,7 +44,8 @@ DEFAULT_THREADS = 8
 DEFAULT_FFMPEG_PATH = None
 DEFAULT_FFPROBE_PATH = None
 
-PREPROCESSING_PROFILE_VERSION = "prep-v2"
+# Increment when the semantics of the prepared WAV change.
+PREPROCESSING_PROFILE_VERSION = "prep-v3"
 
 SUPPORTED_INPUT_EXTENSIONS = [
     ".mp3", ".mp4", ".m4a", ".wav", ".mov", ".mkv",
@@ -61,7 +64,7 @@ class SegmentRecord:
 
 @dataclass
 class QualityReport:
-    """Simple report used to decide whether an automatic fallback is needed."""
+    """Simple structural report used to decide whether an automatic fallback is needed."""
 
     passed: bool
     issues: List[str]
@@ -157,22 +160,66 @@ def input_fingerprint(input_path: Path, chunk_size: int = 1024 * 1024) -> str:
     return digest.hexdigest()[:12]
 
 
+def preprocessing_identity(input_path: Path, normalize_audio: bool = True) -> Dict[str, Any]:
+    """Return the identity required before a prepared WAV is safe to reuse."""
+    return {
+        "source_sha256_prefix": input_fingerprint(input_path),
+        "profile": PREPROCESSING_PROFILE_VERSION,
+        "normalize_audio": bool(normalize_audio),
+        "sample_rate_hz": 16000,
+        "channels": 1,
+        "codec": "pcm_s16le",
+    }
+
+
 def prepared_wav_cache_filename(input_path: Path, normalize_audio: bool = True) -> str:
     """Return a cache filename whose identity includes preprocessing semantics."""
-    fingerprint = input_fingerprint(input_path)
+    identity = preprocessing_identity(input_path, normalize_audio=normalize_audio)
     normalization = "norm" if normalize_audio else "raw"
     return (
-        f"{input_path.stem}_{fingerprint}_"
+        f"{input_path.stem}_{identity['source_sha256_prefix']}_"
         f"{PREPROCESSING_PROFILE_VERSION}_{normalization}_prepared.wav"
     )
 
 
+def prepared_wav_metadata_path(wav_path: Path) -> Path:
+    """Return the sidecar path that records how a prepared WAV was produced."""
+    return wav_path.with_name(f"{wav_path.name}.meta.json")
+
+
+def _read_prepared_wav_metadata(wav_path: Path) -> Optional[Dict[str, Any]]:
+    metadata_path = prepared_wav_metadata_path(wav_path)
+    if not metadata_path.is_file():
+        return None
+    try:
+        data = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def can_reuse_prepared_wav(
+    input_path: Path,
+    wav_path: Path,
+    normalize_audio: bool = True,
+) -> bool:
+    """Return True only when both the WAV and its preprocessing identity match."""
+    if not wav_path.is_file() or wav_path.stat().st_size <= 0:
+        return False
+    metadata = _read_prepared_wav_metadata(wav_path)
+    if metadata is None:
+        return False
+    return metadata == preprocessing_identity(input_path, normalize_audio=normalize_audio)
+
+
 def default_txt_output_path(input_path: Path) -> Path:
-    return get_default_output_root() / f"{input_path.stem}_transcription.txt"
+    fingerprint = input_fingerprint(input_path)
+    return get_default_output_root() / f"{input_path.stem}_{fingerprint}_transcription.txt"
 
 
 def default_srt_output_path(input_path: Path) -> Path:
-    return get_default_output_root() / f"{input_path.stem}_subtitles.srt"
+    fingerprint = input_fingerprint(input_path)
+    return get_default_output_root() / f"{input_path.stem}_{fingerprint}_subtitles.srt"
 
 
 def default_wav_output_path(input_path: Path, normalize_audio: bool = True) -> Path:
@@ -180,6 +227,55 @@ def default_wav_output_path(input_path: Path, normalize_audio: bool = True) -> P
         input_path,
         normalize_audio=normalize_audio,
     )
+
+
+def _canonical_path(path: Path) -> Path:
+    return path.expanduser().resolve(strict=False)
+
+
+def _validate_named_paths(named_paths: Sequence[Tuple[str, Path]]) -> None:
+    canonical = [(name, _canonical_path(path)) for name, path in named_paths]
+    for index, (left_name, left_path) in enumerate(canonical):
+        for right_name, right_path in canonical[index + 1 :]:
+            if left_path == right_path:
+                raise ValueError(
+                    f"Path collision: {left_name} and {right_name} resolve to the same path: "
+                    f"{left_path}. Choose distinct paths."
+                )
+
+
+def validate_distinct_paths(
+    input_path: Path,
+    output_txt: Path,
+    output_srt: Optional[Path],
+    wav_path: Path,
+) -> None:
+    """Reject path collisions before any write can modify user input or another output."""
+    named_paths: List[Tuple[str, Path]] = [
+        ("input", input_path),
+        ("TXT output", output_txt),
+        ("prepared WAV", wav_path),
+        ("prepared WAV metadata", prepared_wav_metadata_path(wav_path)),
+    ]
+    if output_srt is not None:
+        named_paths.append(("SRT output", output_srt))
+    _validate_named_paths(named_paths)
+
+
+def validate_transcription_paths(
+    wav_path: Path,
+    output_txt: Path,
+    output_srt: Optional[Path],
+) -> None:
+    """Reject collisions among the prepared audio and transcript outputs."""
+    named_paths: List[Tuple[str, Path]] = [
+        ("prepared WAV", wav_path),
+        ("prepared WAV metadata", prepared_wav_metadata_path(wav_path)),
+        ("TXT output", output_txt),
+    ]
+    if output_srt is not None:
+        named_paths.append(("SRT output", output_srt))
+    _validate_named_paths(named_paths)
 
 
 def configure_threads(threads: int) -> None:
@@ -303,6 +399,38 @@ def measure_peak_db(input_path: Path, ffmpeg_binary: str) -> Optional[float]:
     return _parse_max_volume_db(result.stderr)
 
 
+def _temporary_wav_path(wav_path: Path) -> Path:
+    wav_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = tempfile.NamedTemporaryFile(
+        prefix=f".{wav_path.stem}.",
+        suffix=".tmp.wav",
+        dir=wav_path.parent,
+        delete=False,
+    )
+    handle.close()
+    return Path(handle.name)
+
+
+def _write_json_atomic(path: Path, payload: Dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = tempfile.NamedTemporaryFile(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+        mode="w",
+        encoding="utf-8",
+        delete=False,
+    )
+    temp_path = Path(handle.name)
+    try:
+        with handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+        os.replace(temp_path, path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 def prepare_wav(
     input_path: Path,
     wav_path: Path,
@@ -311,19 +439,29 @@ def prepare_wav(
     ffmpeg_binary: Optional[str] = None,
     ffprobe_binary: Optional[str] = None,
 ) -> float:
-    """Stream-convert media to 16 kHz mono PCM16 WAV using FFmpeg."""
+    """Atomically stream-convert media to 16 kHz mono PCM16 WAV using FFmpeg."""
+    input_path = _canonical_path(input_path)
+    wav_path = _canonical_path(wav_path)
     if not input_path.is_file():
         raise FileNotFoundError(f"Input file not found: {input_path}")
+    if input_path == wav_path:
+        raise ValueError("Prepared WAV path must be different from the input path.")
 
     ffmpeg_binary = ffmpeg_binary or _resolve_executable(None, "ffmpeg")
     ffprobe_binary = ffprobe_binary or _resolve_executable(None, "ffprobe")
 
-    if reuse_existing_wav and wav_path.is_file() and wav_path.stat().st_size > 0:
-        print(f"✅ Reusing existing WAV: {wav_path}")
+    if reuse_existing_wav and can_reuse_prepared_wav(
+        input_path,
+        wav_path,
+        normalize_audio=normalize_audio,
+    ):
+        print(f"✅ Reusing verified prepared WAV: {wav_path}")
         return probe_audio_duration(wav_path, ffprobe_binary)
 
     print("🔄 Preparing audio as WAV 16 kHz mono PCM16...")
-    wav_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_wav = _temporary_wav_path(wav_path)
+    metadata_path = prepared_wav_metadata_path(wav_path)
+    identity = preprocessing_identity(input_path, normalize_audio=normalize_audio)
 
     command = [
         ffmpeg_binary,
@@ -341,15 +479,18 @@ def prepare_wav(
         if peak_db is not None:
             gain_db = -0.1 - peak_db
             command.extend(["-af", f"volume={gain_db:.3f}dB"])
-    command.append(str(wav_path))
+    command.append(str(temp_wav))
 
     try:
         subprocess.run(command, check=True)
+        duration = probe_audio_duration(temp_wav, ffprobe_binary)
+        os.replace(temp_wav, wav_path)
+        _write_json_atomic(metadata_path, identity)
+        return duration
     except subprocess.CalledProcessError as exc:
-        wav_path.unlink(missing_ok=True)
         raise RuntimeError(f"FFmpeg failed while preparing: {input_path}") from exc
-
-    return probe_audio_duration(wav_path, ffprobe_binary)
+    finally:
+        temp_wav.unlink(missing_ok=True)
 
 
 def get_preset_options(preset: str) -> Dict[str, Any]:
@@ -570,9 +711,10 @@ def transcribe_once(
             srt_handle.close()
 
     if records:
-        print_progress_bar(audio_duration, audio_duration, prefix=f"Transcribing ({preset})")
+        last_end = max(record.end for record in records)
+        print_progress_bar(last_end, audio_duration, prefix=f"Transcribing ({preset})")
     print()
-    print(f"✅ Segments written: {len(records)}")
+    print(f"✅ Decoding finished; segments written: {len(records)}")
     return records
 
 
@@ -641,7 +783,8 @@ def transcribe_with_fallbacks(
     include_timestamps_in_txt: bool,
     audio_duration: float,
 ) -> Tuple[str, QualityReport]:
-    """Run retries without replacing final outputs until an attempt finishes."""
+    """Run retries with per-file atomic promotion of final outputs."""
+    validate_transcription_paths(wav_path, output_txt, output_srt)
     attempts = preset_sequence(requested_preset)
     last_report = QualityReport(False, ["not attempted"])
     final_preset = attempts[-1]
@@ -699,11 +842,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("-i", "--input", default=DEFAULT_INPUT,
                         help="Input audio/video file. If omitted, checks only the dedicated whisper_input folder.")
     parser.add_argument("-o", "--output", default=DEFAULT_OUTPUT,
-                        help="Output TXT file. If omitted, a default path is created.")
+                        help="Output TXT file. If omitted, a source-fingerprinted default path is created.")
     parser.add_argument("--srt-output", default=DEFAULT_SRT_OUTPUT,
                         help="Optional SRT subtitle output path.")
     parser.add_argument("--wav-output", default=DEFAULT_WAV_OUTPUT,
-                        help="Optional intermediate WAV path. If omitted, a content/configuration-addressed cache path is created.")
+                        help="Optional intermediate WAV path. Reuse is verified by a preprocessing metadata sidecar.")
     parser.add_argument("--input-folder", default=None,
                         help="Optional dedicated folder for safe input auto-detection.")
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default=DEFAULT_DEVICE,
@@ -756,15 +899,21 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     configure_threads(args.threads)
     ffmpeg_binary, ffprobe_binary = configure_ffmpeg(args.ffmpeg_path, args.ffprobe_path)
 
-    input_path = Path(args.input).expanduser().resolve()
-    output_txt = Path(args.output).expanduser().resolve() if args.output else default_txt_output_path(input_path).resolve()
-    output_srt = Path(args.srt_output).expanduser().resolve() if args.srt_output else None
+    input_path = _canonical_path(Path(args.input))
+    output_txt = (
+        _canonical_path(Path(args.output))
+        if args.output
+        else _canonical_path(default_txt_output_path(input_path))
+    )
+    output_srt = _canonical_path(Path(args.srt_output)) if args.srt_output else None
     normalize_audio = not args.no_normalize
     wav_path = (
-        Path(args.wav_output).expanduser().resolve()
+        _canonical_path(Path(args.wav_output))
         if args.wav_output
-        else default_wav_output_path(input_path, normalize_audio=normalize_audio).resolve()
+        else _canonical_path(default_wav_output_path(input_path, normalize_audio=normalize_audio))
     )
+
+    validate_distinct_paths(input_path, output_txt, output_srt, wav_path)
 
     device = resolve_device(args.device)
     safe_cpu_fallback = args.device == "cuda" and device == "cpu"

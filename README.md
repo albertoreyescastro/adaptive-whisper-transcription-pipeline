@@ -210,7 +210,7 @@ python -m compileall -q transcribe.py tests
 python -m unittest discover -s tests -v
 ```
 
-GitHub Actions runs these checks on Python 3.10, 3.11 and 3.12. CI installs `requirements.txt`, verifies `faster_whisper`/`ctranslate2` imports, installs FFmpeg and executes a synthetic-audio preprocessing smoke test. It deliberately avoids downloading Whisper model weights.
+GitHub Actions runs these checks on Python 3.10, 3.11 and 3.12. CI installs `requirements.txt`, verifies `faster_whisper`/`ctranslate2` imports, ensures FFmpeg/FFprobe are available (installing FFmpeg only when needed) and executes a synthetic-audio preprocessing smoke test. It deliberately avoids downloading Whisper model weights.
 
 A real ASR transcription smoke test still requires a `faster-whisper` model download.
 

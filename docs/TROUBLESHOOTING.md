@@ -102,13 +102,14 @@ python transcribe.py --input "C:\path\to\audio.m4a" --language en
 
 ## A cached WAV seems wrong
 
-Prepared WAV cache filenames include:
+Prepared WAV cache identity includes:
 
 - a SHA-256 fingerprint of the source media,
 - a preprocessing profile version,
-- whether peak normalisation was enabled.
+- whether peak normalisation was enabled,
+- fixed 16 kHz / mono / PCM16 preparation semantics.
 
-This prevents a normalised run from silently reusing an unnormalised cached WAV, or vice versa.
+The prepared WAV also has a `.meta.json` sidecar. Reuse is allowed only when the sidecar matches the current input and preprocessing options, including when you provide a custom `--wav-output` path. If the sidecar is missing, stale or invalid, the WAV is rebuilt.
 
 To force regeneration anyway:
 
@@ -121,3 +122,11 @@ python transcribe.py --input "C:\path\to\audio.m4a" --no-reuse-wav
 That is expected: the built-in check detects obvious structural failures such as empty output, early stopping and repetition loops. It does **not** measure WER/CER and should not be interpreted as a transcription-accuracy guarantee.
 
 The exact checks are threshold-dependent; on a very short sample, some long-duration or high-segment-count heuristics may not apply.
+
+## A path collision is rejected
+
+The input file, TXT output, SRT output, prepared WAV and its metadata sidecar must resolve to distinct paths. This is deliberate protection against overwriting source media or mixing output formats. Choose different paths and rerun.
+
+## A previous prepared WAV must survive a failed conversion
+
+Preparation is staged through a temporary WAV. The final prepared WAV is replaced only after FFmpeg conversion and FFprobe validation succeed. If conversion fails, temporary files are cleaned up and an existing final WAV is left intact.

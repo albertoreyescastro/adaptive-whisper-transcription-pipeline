@@ -33,7 +33,7 @@ The Kaggle notebook intentionally uses a smaller CPU model and a short public sa
 - Lightweight structural failure detection for empty output, early stopping and repetition loops.
 - Per-file atomic fallback promotion so a failed retry does not overwrite the last completed transcript/subtitle file.
 - Unit-tested deterministic behaviour and GitHub Actions CI across Python 3.10–3.12.
-- CI dependency/import and FFmpeg/FFprobe preprocessing smoke checks without downloading Whisper model weights.
+- CI dependency/import checks plus a dedicated real FFmpeg/FFprobe preprocessing smoke job, without downloading Whisper model weights.
 
 ## Pipeline
 
@@ -210,7 +210,7 @@ python -m compileall -q transcribe.py tests
 python -m unittest discover -s tests -v
 ```
 
-GitHub Actions runs these checks on Python 3.10, 3.11 and 3.12. CI installs `requirements.txt`, verifies `faster_whisper`/`ctranslate2` imports, ensures FFmpeg/FFprobe are available (installing FFmpeg only when needed) and executes a synthetic-audio preprocessing smoke test. It deliberately avoids downloading Whisper model weights.
+GitHub Actions validates dependency installation/imports, syntax and deterministic unit behaviour on Python 3.10, 3.11 and 3.12. A separate Python 3.12 integration job ensures FFmpeg/FFprobe are available and executes the synthetic-audio preprocessing smoke test. CI deliberately avoids downloading Whisper model weights.
 
 A real ASR transcription smoke test still requires a `faster-whisper` model download.
 

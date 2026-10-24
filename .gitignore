@@ -23,6 +23,7 @@ whisper_output/
 outputs/
 cache/
 *.attempt-*.tmp
+*.wav.meta.json
 
 # Audio/video files
 *.wav

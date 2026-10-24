@@ -18,3 +18,5 @@ python transcribe.py --input "C:\path\to\public_sample.wav" --language auto --pr
 ```
 
 The repository intentionally does not ship `sample_audio.wav`; audio/video files are ignored by default to avoid accidentally publishing private media. For a runnable hosted example, use the Kaggle demo linked from the main README.
+
+The default TXT filename includes a short source fingerprint to avoid collisions when different inputs share the same basename. If you choose explicit output paths, keep the input, TXT, SRT and WAV paths distinct; the CLI rejects collisions before writing.

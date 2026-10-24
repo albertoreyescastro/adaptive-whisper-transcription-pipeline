@@ -17,10 +17,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -39,3 +39,32 @@ jobs:
 
       - name: Unit tests
         run: python -m unittest discover -s tests -v
+
+  ffmpeg-integration:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Ensure FFmpeg and FFprobe
+        shell: bash
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg
+          fi
+          ffmpeg -version | head -n 1
+          ffprobe -version | head -n 1
+
+      - name: Syntax check
+        run: python -m compileall -q transcribe.py tests
+
+      - name: FFmpeg preprocessing smoke
+        run: |
+          python -m unittest discover -s tests -p 'test_transcribe.py' -k FFmpegIntegrationTests -v

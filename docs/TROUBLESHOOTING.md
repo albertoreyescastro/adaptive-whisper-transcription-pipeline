@@ -109,7 +109,7 @@ Prepared WAV cache identity includes:
 - whether peak normalisation was enabled,
 - fixed 16 kHz / mono / PCM16 preparation semantics.
 
-The prepared WAV also has a `.meta.json` sidecar. Reuse is allowed only when the sidecar matches the current input and preprocessing options, including when you provide a custom `--wav-output` path. If the sidecar is missing, stale or invalid, the WAV is rebuilt.
+The prepared WAV also has a `.meta.json` sidecar. Reuse is allowed only when the sidecar matches the current input and preprocessing options, including when you provide a custom `--wav-output` path. Matching metadata is not treated as sufficient on its own: FFprobe validates the cached WAV before reuse. If the sidecar is missing, stale or invalid, or if the cached audio cannot be probed successfully, the cache entry is discarded and rebuilt.
 
 To force regeneration anyway:
 
@@ -127,6 +127,8 @@ The exact checks are threshold-dependent; on a very short sample, some long-dura
 
 The input file, TXT output, SRT output, prepared WAV and its metadata sidecar must resolve to distinct paths. This is deliberate protection against overwriting source media or mixing output formats. Choose different paths and rerun.
 
+Fallback attempts use OS-created unique temporary paths rather than predictable filenames, so an input file cannot be mistaken for a retry temporary file simply because of its name.
+
 ## A previous prepared WAV must survive a failed conversion
 
-Preparation is staged through a temporary WAV. The final prepared WAV is replaced only after FFmpeg conversion and FFprobe validation succeed. If conversion fails, temporary files are cleaned up and an existing final WAV is left intact.
+Preparation is staged through a temporary WAV. The final prepared WAV is replaced only after FFmpeg conversion and FFprobe validation succeed. If conversion fails — including during the preliminary peak-measurement pass — temporary files are cleaned up and an existing final WAV is left intact.

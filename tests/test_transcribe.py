@@ -188,6 +188,11 @@ class AudioUtilityTests(unittest.TestCase):
             )
 
             probe_failure = subprocess.CalledProcessError(1, ["ffprobe"])
+
+            def fake_ffmpeg_run(command, **_kwargs):
+                Path(command[-1]).write_bytes(b"rebuilt-wav")
+                return SimpleNamespace(returncode=0)
+
             with patch.object(
                 transcribe,
                 "probe_audio_duration",
@@ -195,7 +200,7 @@ class AudioUtilityTests(unittest.TestCase):
             ), patch.object(
                 transcribe, "measure_peak_db", return_value=None
             ), patch(
-                "transcribe.subprocess.run", return_value=SimpleNamespace(returncode=0)
+                "transcribe.subprocess.run", side_effect=fake_ffmpeg_run
             ):
                 duration = transcribe.prepare_wav(
                     source,
@@ -207,6 +212,7 @@ class AudioUtilityTests(unittest.TestCase):
 
             self.assertEqual(duration, 12.5)
             self.assertTrue(prepared.exists())
+            self.assertEqual(prepared.read_bytes(), b"rebuilt-wav")
             self.assertTrue(metadata.exists())
             self.assertTrue(
                 transcribe.can_reuse_prepared_wav(source, prepared, normalize_audio=True)

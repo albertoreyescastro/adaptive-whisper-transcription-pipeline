@@ -449,39 +449,50 @@ def prepare_wav(
 
     ffmpeg_binary = ffmpeg_binary or _resolve_executable(None, "ffmpeg")
     ffprobe_binary = ffprobe_binary or _resolve_executable(None, "ffprobe")
+    metadata_path = prepared_wav_metadata_path(wav_path)
 
     if reuse_existing_wav and can_reuse_prepared_wav(
         input_path,
         wav_path,
         normalize_audio=normalize_audio,
     ):
-        print(f"✅ Reusing verified prepared WAV: {wav_path}")
-        return probe_audio_duration(wav_path, ffprobe_binary)
+        try:
+            duration = probe_audio_duration(wav_path, ffprobe_binary)
+        except (subprocess.CalledProcessError, RuntimeError, OSError):
+            print(
+                f"⚠️  Prepared WAV cache metadata matched but the audio could not be validated; "
+                f"rebuilding: {wav_path}",
+                file=sys.stderr,
+            )
+            wav_path.unlink(missing_ok=True)
+            metadata_path.unlink(missing_ok=True)
+        else:
+            print(f"✅ Reusing verified prepared WAV: {wav_path}")
+            return duration
 
     print("🔄 Preparing audio as WAV 16 kHz mono PCM16...")
     temp_wav = _temporary_wav_path(wav_path)
-    metadata_path = prepared_wav_metadata_path(wav_path)
     identity = preprocessing_identity(input_path, normalize_audio=normalize_audio)
 
-    command = [
-        ffmpeg_binary,
-        "-y",
-        "-hide_banner",
-        "-loglevel", "error",
-        "-i", str(input_path),
-        "-vn",
-        "-ac", "1",
-        "-ar", "16000",
-        "-c:a", "pcm_s16le",
-    ]
-    if normalize_audio:
-        peak_db = measure_peak_db(input_path, ffmpeg_binary)
-        if peak_db is not None:
-            gain_db = -0.1 - peak_db
-            command.extend(["-af", f"volume={gain_db:.3f}dB"])
-    command.append(str(temp_wav))
-
     try:
+        command = [
+            ffmpeg_binary,
+            "-y",
+            "-hide_banner",
+            "-loglevel", "error",
+            "-i", str(input_path),
+            "-vn",
+            "-ac", "1",
+            "-ar", "16000",
+            "-c:a", "pcm_s16le",
+        ]
+        if normalize_audio:
+            peak_db = measure_peak_db(input_path, ffmpeg_binary)
+            if peak_db is not None:
+                gain_db = -0.1 - peak_db
+                command.extend(["-af", f"volume={gain_db:.3f}dB"])
+        command.append(str(temp_wav))
+
         subprocess.run(command, check=True)
         duration = probe_audio_duration(temp_wav, ffprobe_binary)
         os.replace(temp_wav, wav_path)
@@ -757,7 +768,15 @@ def assess_transcription(records: Sequence[SegmentRecord], audio_duration: float
 def _temporary_attempt_path(final_path: Optional[Path], attempt_index: int, preset: str) -> Optional[Path]:
     if final_path is None:
         return None
-    return final_path.with_name(f".{final_path.name}.attempt-{attempt_index}-{preset}.tmp")
+    final_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = tempfile.NamedTemporaryFile(
+        prefix=f".{final_path.name}.attempt-{attempt_index}-{preset}.",
+        suffix=".tmp",
+        dir=final_path.parent,
+        delete=False,
+    )
+    handle.close()
+    return Path(handle.name)
 
 
 def _promote_attempt(temp_path: Optional[Path], final_path: Optional[Path]) -> None:

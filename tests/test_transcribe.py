@@ -145,6 +145,79 @@ class AudioUtilityTests(unittest.TestCase):
             self.assertEqual(final_wav.read_bytes(), b"previous-good-wav")
             self.assertFalse(any(tmp.glob("*.tmp.wav")))
 
+    def test_volumedetect_failure_cleans_temporary_wav(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            source = tmp / "source.wav"
+            final_wav = tmp / "prepared.wav"
+            temp_wav = tmp / ".prepared.test.tmp.wav"
+            source.write_bytes(b"source-data")
+            temp_wav.write_bytes(b"temporary")
+
+            with patch.object(
+                transcribe, "_temporary_wav_path", return_value=temp_wav
+            ), patch.object(
+                transcribe,
+                "measure_peak_db",
+                side_effect=subprocess.CalledProcessError(1, ["ffmpeg", "volumedetect"]),
+            ):
+                with self.assertRaises(RuntimeError):
+                    transcribe.prepare_wav(
+                        source,
+                        final_wav,
+                        reuse_existing_wav=False,
+                        ffmpeg_binary="ffmpeg",
+                        ffprobe_binary="ffprobe",
+                    )
+
+            self.assertTrue(source.exists())
+            self.assertFalse(final_wav.exists())
+            self.assertFalse(temp_wav.exists())
+
+    def test_invalid_cached_wav_is_rebuilt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            source = tmp / "source.wav"
+            prepared = tmp / "prepared.wav"
+            source.write_bytes(b"source-data")
+            prepared.write_bytes(b"not-a-real-wav")
+            metadata = transcribe.prepared_wav_metadata_path(prepared)
+            metadata.write_text(
+                json.dumps(transcribe.preprocessing_identity(source, normalize_audio=True)),
+                encoding="utf-8",
+            )
+
+            probe_failure = subprocess.CalledProcessError(1, ["ffprobe"])
+
+            def fake_ffmpeg_run(command, **_kwargs):
+                Path(command[-1]).write_bytes(b"rebuilt-wav")
+                return SimpleNamespace(returncode=0)
+
+            with patch.object(
+                transcribe,
+                "probe_audio_duration",
+                side_effect=[probe_failure, 12.5],
+            ), patch.object(
+                transcribe, "measure_peak_db", return_value=None
+            ), patch(
+                "transcribe.subprocess.run", side_effect=fake_ffmpeg_run
+            ):
+                duration = transcribe.prepare_wav(
+                    source,
+                    prepared,
+                    reuse_existing_wav=True,
+                    ffmpeg_binary="ffmpeg",
+                    ffprobe_binary="ffprobe",
+                )
+
+            self.assertEqual(duration, 12.5)
+            self.assertTrue(prepared.exists())
+            self.assertEqual(prepared.read_bytes(), b"rebuilt-wav")
+            self.assertTrue(metadata.exists())
+            self.assertTrue(
+                transcribe.can_reuse_prepared_wav(source, prepared, normalize_audio=True)
+            )
+
 
 class RuntimeResolutionTests(unittest.TestCase):
     def test_normal_cpu_auto_compute_is_int8(self):
@@ -303,6 +376,26 @@ class AtomicFallbackTests(unittest.TestCase):
                     include_timestamps_in_txt=False,
                     audio_duration=10.0,
                 )
+
+    def test_attempt_temp_name_cannot_reuse_legacy_predictable_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            final_txt = tmp / "result.txt"
+            legacy_collision = tmp / ".result.txt.attempt-1-fast.tmp"
+            legacy_collision.write_text("original-input", encoding="utf-8")
+
+            temp_path = transcribe._temporary_attempt_path(final_txt, 1, "fast")
+            self.assertIsNotNone(temp_path)
+            try:
+                self.assertNotEqual(temp_path, legacy_collision)
+                self.assertEqual(
+                    legacy_collision.read_text(encoding="utf-8"),
+                    "original-input",
+                )
+            finally:
+                transcribe._cleanup_attempt(temp_path)
+
+            self.assertTrue(legacy_collision.exists())
 
 
 class ProgressTests(unittest.TestCase):

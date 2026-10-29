@@ -25,13 +25,13 @@ The Kaggle notebook intentionally uses a smaller CPU model and a short public sa
 - Safe CUDA→CPU fallback: an explicit CUDA-oriented compute type is not carried into the CPU fallback.
 - Long-form-oriented FFmpeg preprocessing without loading the entire media file into a Python audio object.
 - Streaming peak normalisation that preserves the intent of the original `pydub.normalize()` step.
-- Verified WAV caching using a SHA-256 source fingerprint, an explicit preprocessing profile and a metadata sidecar that also protects custom `--wav-output` paths.
+- Verified WAV caching using a SHA-256 source fingerprint, an explicit preprocessing profile and a metadata sidecar that also protects custom `--wav-output` paths; cached audio is re-probed before reuse and invalid cache entries are rebuilt.
 - Atomic WAV preparation: FFmpeg writes to a temporary file and the final WAV is promoted only after FFprobe validation succeeds.
 - Safe local input discovery restricted to a dedicated `whisper_input` folder.
 - Preset-based decoding and bounded automatic fallback (`balanced → robust → no-vad`).
 - TXT and optional SRT generation with streaming writes.
 - Lightweight structural failure detection for empty output, early stopping and repetition loops.
-- Per-file atomic fallback promotion so a failed retry does not overwrite the last completed transcript/subtitle file.
+- Per-file atomic fallback promotion through unique temporary files so a failed retry does not overwrite the last completed transcript/subtitle file.
 - Unit-tested deterministic behaviour and GitHub Actions CI across Python 3.10–3.12.
 - CI dependency/import checks plus a dedicated real FFmpeg/FFprobe preprocessing smoke job, without downloading Whisper model weights.
 
@@ -169,13 +169,13 @@ whisper_output/
     input_filename_<sha256-prefix>_prep-v3_norm_prepared.wav.meta.json
 ```
 
-When `--no-normalize` is used, the default cache filename uses `raw` instead of `norm`. Every prepared WAV also receives a `.meta.json` sidecar containing the source fingerprint and preprocessing identity. Reuse is allowed only when that sidecar matches, including for an explicit `--wav-output` path.
+When `--no-normalize` is used, the default cache filename uses `raw` instead of `norm`. Every prepared WAV also receives a `.meta.json` sidecar containing the source fingerprint and preprocessing identity. Reuse is allowed only when that sidecar matches, including for an explicit `--wav-output` path. Before reuse, FFprobe also validates that the cached audio remains readable; an invalid cached WAV is discarded and rebuilt.
 
 Default transcript filenames include the source fingerprint, so two different inputs with the same stem do not silently overwrite each other. Explicit input/TXT/SRT/WAV paths and the WAV metadata sidecar are validated as distinct before any write occurs.
 
-WAV preparation writes to a temporary file and promotes it only after FFmpeg and FFprobe succeed, so a failed conversion does not destroy the previous prepared WAV or the source input.
+WAV preparation writes to a temporary file and promotes it only after FFmpeg and FFprobe succeed, so a failed conversion does not destroy the previous prepared WAV or the source input. Temporary WAVs are cleaned whether conversion fails during peak measurement or during the final conversion.
 
-SRT output is optional and written only when requested. Fallback TXT/SRT attempts use temporary files and each final file is promoted atomically after an attempt completes. TXT and SRT promotion is per-file rather than a multi-file transaction.
+SRT output is optional and written only when requested. Fallback TXT/SRT attempts use OS-created unique temporary files and each final file is promoted atomically after an attempt completes. TXT and SRT promotion is per-file rather than a multi-file transaction.
 
 ## Supported media formats
 
@@ -190,9 +190,9 @@ The pipeline accepts common FFmpeg-readable formats, including:
 The test suite intentionally avoids downloading large Whisper models. It covers deterministic pipeline behaviour including:
 
 - source fingerprinting and collision-resistant default output naming,
-- preprocessing-cache identity and explicit-WAV sidecar validation,
+- preprocessing-cache identity, explicit-WAV sidecar validation and corrupt-cache recovery,
 - input/output path-collision rejection,
-- atomic FFmpeg preparation failure handling,
+- atomic FFmpeg preparation and cleanup failure handling,
 - FFmpeg peak parsing,
 - strict CLI validation,
 - CPU/CUDA compute-type resolution,
@@ -200,7 +200,7 @@ The test suite intentionally avoids downloading large Whisper models. It covers 
 - timestamp formatting,
 - all structural quality-gate branches,
 - progress coverage semantics,
-- atomic fallback output handling for TXT/SRT,
+- atomic fallback output handling with unique attempt paths for TXT/SRT,
 - a real FFmpeg/FFprobe preprocessing smoke test.
 
 Run locally:

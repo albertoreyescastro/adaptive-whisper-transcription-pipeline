@@ -8,7 +8,7 @@ A portable CPU/GPU transcription workflow for long-form-oriented audio and video
 
 The project keeps a deliberately simple shape: one reusable Python entry point, explicit FFmpeg preprocessing, hardware-aware defaults, bounded fallback presets, transcript/subtitle outputs and lightweight quality sanity checks. It is designed for a normal CLI while remaining friendly to a Windows/Spyder workflow.
 
-> **Portfolio scope:** this is a reusable engineering project inspired by practical scientific/outreach transcription workflows. It is not a claim that this exact `faster-whisper` implementation was the production stack used during any specific internship or institution.
+> **Portfolio scope and provenance:** The IAC transcription workflow began with `SpeechRecognition` and was subsequently rebuilt using `faster-whisper` with automatic CPU/GPU selection. This repository is a **later reusable implementation**, not the original institutional codebase or a record of its interview-level outcomes. The historical interview counts and time savings described below are not reproduced by the public demo or CI.
 
 ## Live demo
 
@@ -216,9 +216,11 @@ A real ASR transcription smoke test still requires a `faster-whisper` model down
 
 ## Scientific outreach context
 
-The engineering motivation came from practical transcription of audiovisual scientific/outreach material.
+The engineering motivation came from the Communication and Scientific Culture Unit (UC3) at the Instituto de Astrofísica de Canarias (IAC). The Python workflow began with `SpeechRecognition` and later evolved into a `faster-whisper` implementation with automatic CPU/GPU selection.
 
-One relevant earlier context is the Instituto de Astrofísica de Canarias (IAC), where the internship transcription tooling was Python-based and used a different software stack, including `SpeechRecognition`, to process audiovisual material and support segmented multilingual subtitles. This repository is a later reusable `faster-whisper` re-engineering of that problem; it is not the original internship codebase.
+The work supported transcription, translation and segmented multilingual subtitles for **more than ten scientific interviews**, including those with Nobel Prize-winning physicists Donna Strickland and John Mather. Across that work, hours of manual listening and typing per interview became a subtitle draft ready for human review in minutes. These are historical internship outcomes, **not throughput or accuracy benchmarks of this public repository**.
+
+This repository packages the later approach for reuse; it is not the original internship codebase, and it includes no internal institutional recordings or transcripts.
 
 - [IAC official website](https://www.iac.es/)
 - [IAC news and outreach archive](https://www.iac.es/es/divulgacion/noticias)

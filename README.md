@@ -8,7 +8,7 @@ A portable CPU/GPU transcription workflow for long-form-oriented audio and video
 
 The project keeps a deliberately simple shape: one reusable Python entry point, explicit FFmpeg preprocessing, hardware-aware defaults, bounded fallback presets, transcript/subtitle outputs and lightweight quality sanity checks. It is designed for a normal CLI while remaining friendly to a Windows/Spyder workflow.
 
-> **Provenance:** I proposed and developed the first automated subtitling pipeline for the IAC's Communication and Scientific Culture Unit (UC3), starting with `SpeechRecognition` and later using `faster-whisper` with automatic CPU/GPU selection. UC3 still uses the subtitling workflow. **This public repository is a later, reusable engineering implementation, not the original institutional codebase**; its demo and CI do not reproduce the historical interview volumes or time savings.
+> **Provenance:** During my March–May 2025 internship at the IAC's Communication and Scientific Culture Unit (UC3), I proposed and developed its first automated subtitling pipeline: first using `SpeechRecognition`, then migrating to `faster-whisper`, and finally adding automatic CPU/GPU selection. **That final internship workflow is the version UC3 continues to use.** I made further incremental code refinements after the placement. This public repository presents a polished, reusable version of the same engineering work, **not a publication of the original institutional codebase**; its demo and CI do not measure historical interview volumes or time savings.
 
 ## Live demo
 
@@ -218,7 +218,7 @@ A real ASR transcription smoke test still requires a `faster-whisper` model down
 
 The original use case was recurring scientific-interview production at UC3. Alongside the team, I interviewed Nobel laureates **John Mather** and **Donna Strickland**. We applied the subtitling pipeline to both of their interviews and to **more than ten scientific interviews in total**, published on the IAC's official channels, supporting automated transcription, translation and multilingual subtitle drafts.
 
-For that IAC workflow, each interview moved from hours of manual listening and typing to a subtitle draft ready for editorial review in minutes. This describes the unit's operational experience, **not a measured end-to-end performance result for the public `faster-whisper` repository**. Its reusable implementation additionally documents CPU/CUDA selection, FFmpeg preprocessing, bounded retries and output safeguards; no institutional recordings or transcripts are provided.
+For that IAC workflow, each interview moved from hours of manual listening and typing to a subtitle draft ready for editorial review in minutes. This describes the unit's operational experience, **not a measured end-to-end performance result for the public `faster-whisper` repository**. The internship version already used `faster-whisper` and automatic CPU/GPU selection; subsequent improvements refined its public reusable form, including FFmpeg preprocessing, bounded retries and output safeguards. No institutional recordings or transcripts are provided.
 
 - [IAC official website](https://www.iac.es/)
 - [IAC news and outreach archive](https://www.iac.es/es/divulgacion/noticias)

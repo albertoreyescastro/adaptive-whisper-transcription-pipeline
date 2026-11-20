@@ -8,7 +8,7 @@ A portable CPU/GPU transcription workflow for long-form-oriented audio and video
 
 The project keeps a deliberately simple shape: one reusable Python entry point, explicit FFmpeg preprocessing, hardware-aware defaults, bounded fallback presets, transcript/subtitle outputs and lightweight quality sanity checks. It is designed for a normal CLI while remaining friendly to a Windows/Spyder workflow.
 
-> **Portfolio scope:** this is a reusable engineering project inspired by practical scientific/outreach transcription workflows. It is not a claim that this exact `faster-whisper` implementation was the production stack used during any specific internship or institution.
+> **Provenance:** During my March–May 2025 internship at the IAC's Communication and Scientific Culture Unit (UC3), I proposed and developed its first automated subtitling pipeline: first using `SpeechRecognition`, then migrating to `faster-whisper`, and finally adding automatic CPU/GPU selection. **That final internship workflow is the version UC3 continues to use.** I made further incremental code refinements after the placement. This public repository presents a polished, reusable version of the same engineering work, **not a publication of the original institutional codebase**; its demo and CI do not measure historical interview volumes or time savings.
 
 ## Live demo
 
@@ -216,14 +216,12 @@ A real ASR transcription smoke test still requires a `faster-whisper` model down
 
 ## Scientific outreach context
 
-The engineering motivation came from practical transcription of audiovisual scientific/outreach material.
+The original use case was recurring scientific-interview production at UC3. Alongside the UC3 team, I interviewed Nobel laureates **John Mather** and **Donna Strickland**. We subsequently applied my automated transcription and subtitling pipeline to both interviews and to **more than ten interviews in total**, all published on the IAC's official channels, producing multilingual subtitle drafts for editorial review.
 
-One relevant earlier context is the Instituto de Astrofísica de Canarias (IAC), where the internship transcription tooling was Python-based and used a different software stack, including `SpeechRecognition`, to process audiovisual material and support segmented multilingual subtitles. This repository is a later reusable `faster-whisper` re-engineering of that problem; it is not the original internship codebase.
+For that IAC workflow, each interview moved from hours of manual listening and typing to a subtitle draft ready for editorial review in minutes. This describes the unit's operational experience, **not a measured end-to-end performance result for the public `faster-whisper` repository**. The internship version already used `faster-whisper` and automatic CPU/GPU selection; subsequent improvements refined its public reusable form, including FFmpeg preprocessing, bounded retries and output safeguards. No institutional recordings or transcripts are provided.
 
 - [IAC official website](https://www.iac.es/)
 - [IAC news and outreach archive](https://www.iac.es/es/divulgacion/noticias)
-
-No private institutional audio, video or real internal transcripts are included in this repository.
 
 ## Limitations
 

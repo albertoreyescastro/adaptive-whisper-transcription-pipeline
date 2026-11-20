@@ -216,7 +216,7 @@ A real ASR transcription smoke test still requires a `faster-whisper` model down
 
 ## Scientific outreach context
 
-The original use case was recurring scientific-interview production at UC3. Alongside the team, I interviewed Nobel laureates **John Mather** and **Donna Strickland**. We applied the subtitling pipeline to both of their interviews and to **more than ten scientific interviews in total**, published on the IAC's official channels, supporting automated transcription, translation and multilingual subtitle drafts.
+The original use case was recurring scientific-interview production at UC3. I helped interview Nobel laureate **John Mather** alongside the team. We applied the subtitling pipeline to his interview and to an interview with fellow Nobel laureate **Donna Strickland** and to **more than ten scientific interviews in total**, published on the IAC's official channels, supporting automated transcription, translation and multilingual subtitle drafts.
 
 For that IAC workflow, each interview moved from hours of manual listening and typing to a subtitle draft ready for editorial review in minutes. This describes the unit's operational experience, **not a measured end-to-end performance result for the public `faster-whisper` repository**. The internship version already used `faster-whisper` and automatic CPU/GPU selection; subsequent improvements refined its public reusable form, including FFmpeg preprocessing, bounded retries and output safeguards. No institutional recordings or transcripts are provided.
 
